@@ -1,0 +1,1 @@
+# omarchy kcd plugin
