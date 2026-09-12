@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "bet.kcd",
+  "name": "KDE Connect",
+  "version": "0.1.0",
+  "author": "bet",
+  "license": "MIT",
+  "description": "Night Drive dashboard for kcd: phone status, battery, now-playing controls, and quick actions (ping, ring, clipboard).",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "KDE Connect",
+    "description": "Phone status, battery, and media controls via kcd",
+    "category": "Phone",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
