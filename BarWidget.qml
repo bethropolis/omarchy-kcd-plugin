@@ -4,9 +4,10 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Bar button for the Night Drive kcd panel: phone glyph + battery +
-// playback dot. The panel owns all kcd state; this widget only mirrors
-// it for the closed-bar read-out, following the weather BarWidget pattern.
+// Bar button for the Night Drive kcd panel: battery icon + charge that
+// mirrors the panel state. The panel owns all kcd state; this widget only
+// mirrors it for the closed-bar read-out, following the weather BarWidget
+// pattern.
 BarWidget {
   id: root
   moduleName: "bet.kcd"

@@ -238,6 +238,7 @@ Panel {
         root.batteryCharging = ad.battery.charging === true
       }
       if (ad.media && Kcd.isFreshMedia(ad.media)) root.setTrack(ad.media)
+      if (ad.lastSeen) root.lastSeenText = Kcd.formatLastSeen(ad.lastSeen)
     }
     root.fillGaps()
     root.daemonText = devs.length > 0 ? "kcd — " + devs.length + " phone(s)" : "kcd — no phones"
@@ -263,12 +264,14 @@ Panel {
 
   function anchorPos() {
     var now = root.clockMs
-    if (!root.track) return 0
-    var base = Number(root.track.pos) || 0
-    if (root.track.isPlaying === true && Number(root.track.posAnchorMs) > 0) {
-      base += now - Number(root.track.posAnchorMs)
+    // liveTrack (daemon-gated), never the raw cache: a dead daemon must
+    // freeze the readout instead of creeping on stale data.
+    if (!root.liveTrack) return 0
+    var base = Number(root.liveTrack.pos) || 0
+    if (root.liveTrack.isPlaying === true && Number(root.liveTrack.posAnchorMs) > 0) {
+      base += now - Number(root.liveTrack.posAnchorMs)
     }
-    var len = Number(root.track.length) || 0
+    var len = Number(root.liveTrack.length) || 0
     if (len > 0) base = Math.min(len, base)
     return Math.max(0, base)
   }
@@ -630,7 +633,7 @@ Panel {
 
                   PanelToolTip {
                     visible: wifiMouse.containsMouse
-                    text: root.liveConnected ? "Phone on local network (WiFi)" : "Phone offline"
+                    text: root.liveConnected ? (root.autoDevice && root.autoDevice.signal ? "Phone network: " + root.autoDevice.signal.label : "Phone on local network") : "Phone offline"
                     fontFamily: root.contentFontFamily
                   }
                 }

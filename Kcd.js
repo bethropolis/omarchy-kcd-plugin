@@ -26,7 +26,12 @@ function normalizeDevice(entry) {
     // Enriched summaries (devices --json, state.snapshot) embed cached
     // sub-states; absent (omitempty) when the daemon has nothing cached.
     battery: normalizeBattery(entry.battery !== undefined ? entry.battery : entry.Battery),
-    media: normalizeTrack(entry.media !== undefined ? entry.media : entry.Media)
+    media: normalizeTrack(entry.media !== undefined ? entry.media : entry.Media),
+    // last_seen is an ISO timestamp string ("" when never seen).
+    lastSeen: String(entry.last_seen !== undefined && entry.last_seen !== null ? entry.last_seen : (entry.lastSeen !== undefined && entry.lastSeen !== null ? entry.lastSeen : (entry.LastSeen || ""))),
+    // signal is the daemon's connectivity report ({ signalStrengths: {...} })
+    // reduced to a display label, or null when unreported.
+    signal: normalizeSignal(entry.signal !== undefined ? entry.signal : entry.Signal)
   }
 }
 
@@ -41,6 +46,41 @@ function normalizeBattery(obj) {
   return { charge: Math.round(n), charging: charging === true }
 }
 
+// Reduce a connectivity report ({ signalStrengths: { key: {
+// networkType, networkDetailedType?, signalStrength } } }) to a display
+// label from its first entry. Null when unreported — callers fall back
+// to a generic "local network" line.
+function normalizeSignal(obj) {
+  if (!obj || typeof obj !== "object") return null
+  var strengths = obj.signalStrengths !== undefined && obj.signalStrengths !== null ? obj.signalStrengths : obj.SignalStrengths
+  if (!strengths || typeof strengths !== "object") return null
+  var keys = Object.keys(strengths)
+  if (keys.length === 0) return null
+  var s = strengths[keys[0]] || {}
+  var detail = s.networkDetailedType !== undefined && s.networkDetailedType !== null ? s.networkDetailedType : s.NetworkDetailedType
+  var type = s.networkType !== undefined && s.networkType !== null ? s.networkType : s.NetworkType
+  var label = String(detail || type || "")
+  if (label === "") return null
+  return {
+    label: label,
+    strength: numOr(s.signalStrength !== undefined ? s.signalStrength : s.SignalStrength, -1)
+  }
+}
+
+// "Last seen: …" line for an ISO timestamp. "Now" under 90s, relative
+// minutes/hours after that, short date beyond a day. Garbage → "—".
+function formatLastSeen(iso) {
+  var t = Date.parse(String(iso || ""))
+  if (isNaN(t)) return "—"
+  var mins = Math.max(0, Math.floor((Date.now() - t) / 60000))
+  if (mins < 2) return "Now"
+  if (mins < 60) return mins + "m ago"
+  var hours = Math.floor(mins / 60)
+  if (hours < 24) return hours + "h ago"
+  var d = new Date(t)
+  function pad(n) { return ("0" + n).slice(-2) }
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
+}
 // Freshness rule for cached media (snapshot/summary carry mediaAgeMs;
 // one-shot/watch payloads don't, and playing is always fresh). Stale
 // paused entries must not resurrect ghost tracks on boot.
@@ -332,6 +372,8 @@ if (typeof module !== "undefined") {
     parseDevicesOutput: parseDevicesOutput,
     normalizeDevices: normalizeDevices,
     normalizeBattery: normalizeBattery,
+    normalizeSignal: normalizeSignal,
+    formatLastSeen: formatLastSeen,
     isFreshMedia: isFreshMedia,
     isUsableDevice: isUsableDevice,
     pickAutoDevice: pickAutoDevice,

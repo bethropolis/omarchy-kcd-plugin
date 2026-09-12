@@ -28,7 +28,8 @@ omarchy plugin enable bet.kcd
 
 * Bar shows battery level (dimmed when offline). Left-click toggles the
   panel, middle-click refreshes.
-* Panel header — phone, WiFi link icon, battery, last-seen.
+* Panel header — phone, link icon (tooltip shows the phone's reported
+  network type when available), battery, last-seen.
 * Media card — album art, title/artist, prev / play-pause / next, wave
   seeker with smooth playhead.
 * Quick actions — **Ping**, **Ring**, **Clipboard** (live).
@@ -51,6 +52,6 @@ testable under node).
 | `manifest.json` | Plugin contract (`bar-widget` → `BarWidget.qml`) |
 | `BarWidget.qml` | Bar button, mirrors panel state |
 | `Panel.qml` | Night Drive dashboard, owns all kcd IO |
-| `QuickTile.qml` | Quick-action tile component |
+| `QuickTile.qml` | Quick-action tile component (+ `accent` primary style) |
 | `KcdMissing.qml` / `KcdUnpaired.qml` | Empty-state panels |
 | `Kcd.js` | Device/track/event parsing + CLI argv builders |
