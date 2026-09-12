@@ -238,7 +238,12 @@ Panel {
         root.batteryCharging = ad.battery.charging === true
       }
       if (ad.media && Kcd.isFreshMedia(ad.media)) root.setTrack(ad.media)
-      if (ad.lastSeen) root.lastSeenText = Kcd.formatLastSeen(ad.lastSeen)
+      // A connected phone is seen now by definition (TCP up, packets
+      // flowing) — the daemon stamp only moves on (re)connect, so it
+      // would age while the phone sits next to you.
+      if (ad.connected) root.lastSeenText = "Now"
+      else if (ad.lastSeen) root.lastSeenText = Kcd.formatLastSeen(ad.lastSeen)
+      else if (switched) root.lastSeenText = "—"
     }
     root.fillGaps()
     root.daemonText = devs.length > 0 ? "kcd — " + devs.length + " phone(s)" : "kcd — no phones"
@@ -1047,9 +1052,23 @@ Panel {
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: "kcd " + root.kcdVersion
-              color: root.contentDim
+              color: versionMouse.containsMouse ? root.contentForeground : root.contentDim
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.caption
+
+              MouseArea {
+                id: versionMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Qt.openUrlExternally("https://github.com/bethropolis/kcd")
+              }
+
+              PanelToolTip {
+                visible: versionMouse.containsMouse
+                text: "Open kcd on GitHub"
+                fontFamily: root.contentFontFamily
+              }
             }
           }
         }

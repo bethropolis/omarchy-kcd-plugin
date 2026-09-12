@@ -36,7 +36,8 @@ omarchy plugin enable bet.kcd
   Text / Files / Share are dimmed v2 placeholders.
 * No paired phone? **Start pairing** runs `kcd pair -y` (auto-accepts the
   first request, then stops). Daemon down? **Start daemon** starts it.
-* Footer gear opens `kcd.toml` in Neovim.
+* Footer gear opens `kcd.toml` in Neovim. Footer right shows the live
+  `kcd <version>` — click it to open `bethropolis/kcd` on GitHub.
 
 ## How it works
 

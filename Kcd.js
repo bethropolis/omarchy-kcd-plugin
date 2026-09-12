@@ -60,7 +60,9 @@ function normalizeSignal(obj) {
   var detail = s.networkDetailedType !== undefined && s.networkDetailedType !== null ? s.networkDetailedType : s.NetworkDetailedType
   var type = s.networkType !== undefined && s.networkType !== null ? s.networkType : s.NetworkType
   var label = String(detail || type || "")
-  if (label === "") return null
+  // "Unknown" is the daemon's zero value, not information — treat it as
+  // unreported so callers fall back to the generic line.
+  if (label === "" || /^unknown$/i.test(label)) return null
   return {
     label: label,
     strength: numOr(s.signalStrength !== undefined ? s.signalStrength : s.SignalStrength, -1)
