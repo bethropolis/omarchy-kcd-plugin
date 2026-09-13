@@ -23,6 +23,10 @@ Panel {
   // ---- State
   property var devices: []
   property var autoDevice: Kcd.pickAutoDevice(devices)
+  // First paired device regardless of connection: distinguishes "paired
+  // but offline" (phone asleep, TCP down) from "never paired".
+  readonly property var pairedDevice: Kcd.pickPairedDevice(devices)
+  readonly property string pairedName: pairedDevice ? String(pairedDevice.name) : "phone"
   readonly property string deviceId: autoDevice ? String(autoDevice.id) : ""
   readonly property string deviceName: autoDevice ? String(autoDevice.name) : "No phone"
   readonly property bool deviceConnected: autoDevice ? autoDevice.connected === true : false
@@ -71,13 +75,15 @@ Panel {
   readonly property bool usableArt: hasTrack && Kcd.isUsableArt(liveTrack.albumArtUrl)
   readonly property bool playing: hasTrack && liveTrack.isPlaying === true
   readonly property bool liveConnected: root.deviceConnected && root.daemonUp
-  // Missing / down / unpaired / ready. Before the first probes complete
-  // this reads "ready" (status quo) so there is no boot flash.
+  // Missing / down / unpaired / offline / ready. Before the first
+  // probes complete this reads "ready" (status quo) so there is no boot
+  // flash. Offline = paired but unreachable (phone asleep): patience,
+  // not another pair request.
   readonly property string uiState: {
     if (!root.installProbed || !root.daemonProbed) return "ready"
     if (!root.installOk) return "missing"
     if (!root.daemonUp) return "down"
-    if (!root.autoDevice) return "unpaired"
+    if (!root.autoDevice) return root.pairedDevice ? "offline" : "unpaired"
     return "ready"
   }
 
@@ -93,7 +99,10 @@ Panel {
   }
   readonly property string barTooltip: {
     if (root.installProbed && !root.installOk) return "KDE Connect — kcd not installed"
-    if (!autoDevice) return root.daemonUp && devices.length > 0 ? "KDE Connect — no paired phone" : "KDE Connect — no phone"
+    if (!autoDevice) {
+      if (root.pairedDevice) return root.pairedName + " — offline (asleep?)"
+      return root.daemonUp && devices.length > 0 ? "KDE Connect — no paired phone" : "KDE Connect — no phone"
+    }
     var tip = deviceName + (root.liveConnected ? " — connected" : " — offline")
     if (root.daemonProbed && !root.daemonUp) tip += " (daemon not running)"
     if (hasTrack) tip += "\n" + liveTrack.title + (liveTrack.artist !== "" ? " — " + liveTrack.artist : "")
@@ -337,6 +346,17 @@ Panel {
     if (!cmd) return
     if ((tile === "ping" || tile === "ring") && root.deviceId === "") return
     Quickshell.execDetached(cmd)
+  }
+
+  // Share a file: close first (the portal chooser takes over from here),
+  // then hand off to kcd-share.sh — it picks via omarchy-file-select,
+  // sends one `kcd share`, and notifies. Invoked through bash so a lost
+  // exec bit on deploy can never break it.
+  function shareFile() {
+    if (root.deviceId === "") return
+    var script = Quickshell.env("HOME") + "/.config/omarchy/plugins/bet.kcd/kcd-share.sh"
+    root.close()
+    Quickshell.execDetached(["bash", script, root.deviceId, root.deviceName])
   }
 
   function mediaAction(action) {
@@ -894,89 +914,16 @@ Panel {
             }
           }
 
-          // ---- 3. Quick actions (ready state only)
-          Text {
-            visible: root.uiState === "ready"
-            textFormat: Text.PlainText
-            text: "QUICK ACTIONS"
-            color: root.contentDim
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.caption
-            font.letterSpacing: 1.4
-            font.bold: true
-          }
-
-          Grid {
+          // ---- 3. Quick actions (ready state only; Step 1 split)
+          QuickActionsRow {
             width: parent.width
             visible: root.uiState === "ready"
-            columns: 3
-            rowSpacing: Style.space(8)
-            columnSpacing: Style.space(8)
-
-            property real cellWidth: Math.max(0, (width - columnSpacing * 2) / 3)
-
-            QuickTile {
-              width: parent.cellWidth
-              iconText: ""
-              label: "Ping"
-              tooltipText: "Send a ping"
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              enabled: root.liveConnected
-              onTapped: root.runTile("ping")
-            }
-
-            QuickTile {
-              width: parent.cellWidth
-              iconText: ""
-              label: "Ring"
-              tooltipText: "Ring phone"
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              enabled: root.liveConnected
-              onTapped: root.runTile("ring")
-            }
-
-            QuickTile {
-              width: parent.cellWidth
-              iconText: ""
-              label: "Clipboard"
-              tooltipText: "Sync clipboard"
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              enabled: root.liveConnected
-              onTapped: root.runTile("clipboard")
-            }
-
-            QuickTile {
-              width: parent.cellWidth
-              iconText: ""
-              label: "Text"
-              tooltipText: "SMS compose — v2"
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              enabled: false
-            }
-
-            QuickTile {
-              width: parent.cellWidth
-              iconText: ""
-              label: "Files"
-              tooltipText: "SFTP browse — v2"
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              enabled: false
-            }
-
-            QuickTile {
-              width: parent.cellWidth
-              iconText: ""
-              label: "Share"
-              tooltipText: "Share a file — v2"
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              enabled: false
-            }
+            liveConnected: root.liveConnected
+            deviceName: root.deviceName
+            foreground: root.contentForeground
+            fontFamily: root.contentFontFamily
+            onTileTapped: function(tile) { root.runTile(tile) }
+            onShareRequested: root.shareFile()
           }
 
           // ---- State panels (exactly one is ever visible)
@@ -988,8 +935,9 @@ Panel {
           }
 
           KcdUnpaired {
-            visible: root.uiState === "down" || root.uiState === "unpaired"
-            mode: root.uiState === "down" ? "down" : "unpaired"
+            visible: root.uiState === "down" || root.uiState === "unpaired" || root.uiState === "offline"
+            mode: root.uiState === "down" ? "down" : (root.uiState === "offline" ? "offline" : "unpaired")
+            deviceName: root.pairedName
             pairing: root.pairing
             startingDaemon: root.startingDaemon
             foreground: root.contentForeground
