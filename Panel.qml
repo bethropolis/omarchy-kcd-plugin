@@ -559,121 +559,22 @@ Panel {
           width: dashScroll.width
           spacing: Style.space(12)
 
-          // ---- 1. Header (ready state only)
-          Item {
+          // ---- 1. Header (ready state only; Step 2 split)
+          PanelHeader {
             width: parent.width
             visible: root.uiState === "ready"
-            height: Math.max(headerLeft.height, headerRight.height)
-
-            Row {
-              id: headerLeft
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(12)
-
-              Text {
-                anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.PlainText
-                text: "󰄜"
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.title + 6
-              }
-
-              Column {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(2)
-
-                Text {
-                  textFormat: Text.PlainText
-                  text: root.deviceName
-                  color: root.contentForeground
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.title
-                  font.bold: true
-                  elide: Text.ElideRight
-                  width: Math.min(implicitWidth, Style.space(160))
-                }
-
-                Row {
-                  spacing: Style.space(6)
-
-                  Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Style.space(7)
-                    height: Style.space(7)
-                    radius: width / 2
-                    color: root.liveConnected ? "#4ade80" : Qt.darker(root.contentForeground, 2.0)
-                  }
-
-                  Text {
-                    textFormat: Text.PlainText
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.liveConnected ? "Connected" : "Offline"
-                    color: root.liveConnected ? "#4ade80" : root.contentDim
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.bold: true
-                  }
-                }
-              }
-            }
-
-            Column {
-              id: headerRight
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              Row {
-                anchors.right: parent.right
-                spacing: Style.space(10)
-
-              Text {
-                anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.PlainText
-                text: root.batteryCharge >= 0 ? Kcd.batteryIcon(root.batteryCharge, root.batteryCharging) + " " + root.batteryCharge + "%" : "󰂃 --"
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-                }
-
-                Text {
-                  id: wifiGlyph
-                  textFormat: Text.PlainText
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: ""
-                  color: root.contentForeground
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.body
-                  font.bold: true
-
-                  MouseArea {
-                    id: wifiMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.ArrowCursor
-                  }
-
-                  PanelToolTip {
-                    visible: wifiMouse.containsMouse
-                    text: root.liveConnected ? (root.autoDevice && root.autoDevice.signal ? "Phone network: " + root.autoDevice.signal.label : "Phone on local network") : "Phone offline"
-                    fontFamily: root.contentFontFamily
-                  }
-                }
-              }
-
-              Text {
-                textFormat: Text.PlainText
-                anchors.right: parent.right
-                text: "Last seen: " + root.lastSeenText
-                color: root.contentDim
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-            }
+            deviceName: root.deviceName
+            liveConnected: root.liveConnected
+            batteryCharge: root.batteryCharge
+            batteryCharging: root.batteryCharging
+            networkTooltip: root.liveConnected
+              ? (root.autoDevice && root.autoDevice.signal ? "Phone network: " + root.autoDevice.signal.label : "Phone on local network")
+              : "Phone offline"
+            lastSeenText: root.lastSeenText
+            foreground: root.contentForeground
+            fontFamily: root.contentFontFamily
           }
+
 
           // ---- 2. Compact media card (120px)
           Rectangle {
