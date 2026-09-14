@@ -6,6 +6,18 @@
   "author": "bethropolis",
   "license": "MIT",
   "description": "Bar widget and dashboard for kcd, a KDE Connect protocol daemon written in Go: phone status, battery, now-playing controls, file share, and screenshot-to-phone.",
+  "homepage": "https://github.com/bethropolis/omarchy-kcd-plugin",
+  "repository": "https://github.com/bethropolis/omarchy-kcd-plugin.git",
+  "keywords": [
+    "phone",
+    "kde-connect",
+    "kcd",
+    "battery",
+    "media",
+    "share",
+    "screenshot",
+    "android"
+  ],
   "kinds": [
     "bar-widget"
   ],

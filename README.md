@@ -83,6 +83,10 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
 * Footer gear opens `kcd.toml` in Neovim. Footer right shows the live
   `kcd <version>`; click it to open `bethropolis/kcd` on GitHub.
 
+* Scriptable through the shell like any widget (toggle the panel from a
+  keybind, close it on lock):
+
+
 ## How it works
 
 The panel boots from one `kcd watch --json` snapshot (devices + battery +
