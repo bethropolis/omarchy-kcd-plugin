@@ -38,8 +38,11 @@ omarchy plugin enable bet.kcd
   picks one file with the native chooser (`omarchy-file-select`) and sends
   it via `kcd share`, reporting back as a desktop notification.
   Screenshot captures the focused monitor with `grim` (after the panel
-  hides itself) and sends the PNG the same way; the `/tmp` capture is
-  always removed.
+  hides itself) and sends the PNG the same way. Captures stage in
+  `~/.cache/bet.kcd/shots/` — never `/tmp` — because `kcd share`
+  returns on invitation while the daemon opens the file seconds later;
+  the staged file is deleted on `share.complete` (or pruned after 24h),
+  and the notification only claims success then.
 * No paired phone? **Start pairing** runs `kcd pair -y` (auto-accepts the
   first request, then stops). Daemon down? **Start daemon** starts it.
 * Footer gear opens `kcd.toml` in Neovim. Footer right shows the live
@@ -63,4 +66,4 @@ testable under node).
 | `KcdMissing.qml` / `KcdUnpaired.qml` | Empty-state panels |
 | `Kcd.js` | Device/track/event parsing + CLI argv builders |
 | `kcd-share.sh` | Share flow: native pick → `kcd share` → notification |
-| `kcd-screenshot-share.sh` | Screenshot flow: `grim` capture → `kcd share` → notification |
+| `kcd-screenshot-share.sh` | Screenshot flow: `grim` → cache stage → `kcd share` → delete on `share.complete` |
