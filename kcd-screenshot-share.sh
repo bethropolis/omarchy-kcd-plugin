@@ -95,7 +95,7 @@ for line in sys.stdin:
         continue
     sys.exit(0 if payload.get("success") else 1)
 sys.exit(2)
-' "$shot_base")
+' "$shot_base"
 status=$?
 
 if ((status == 0)); then

@@ -131,8 +131,6 @@ Panel {
     Quickshell.execDetached([term, "nvim", Kcd.configTomlPath(Quickshell.env("HOME"), Quickshell.env("XDG_CONFIG_HOME"))])
   }
 
-  // Local interpolation so the wave playhead creeps while playing:
-
   // ================= MAIN INTERFACE =================
   KeyboardPanel {
     id: panel
