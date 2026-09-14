@@ -111,7 +111,11 @@ QtObject {
   function refresh(forceDevices) {
     var force = forceDevices !== false
     io.ioStartMs = Date.now()
-    if (!versionProc.running && !io.versionOk) {
+    // Version probe re-runs on every refresh (not just until first
+    // success): a latched installOk would blind reopen to a removed
+    // binary. While the probe runs the flags hold, so there is no flash;
+    // on exit they carry current truth. One local sh spawn per open.
+    if (!versionProc.running) {
       // Wrapped in sh so the spawn always reports an exit: a missing kcd
       // binary fails the spawn itself (no onExited), which used to wedge
       // the probes and strand the panel in zombie "ready". sh exits 127
@@ -448,7 +452,10 @@ QtObject {
     }
     onExited: function(exitCode) {
       io.installProbed = true
-      if (exitCode !== 0) io.installOk = false
+      if (exitCode !== 0) {
+        io.installOk = false
+        io.versionOk = false
+      }
     }
   }
 
