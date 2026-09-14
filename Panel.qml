@@ -266,17 +266,6 @@ Panel {
                   fontFamily: root.contentFontFamily
                 }
               }
-
-              Text {
-                textFormat: Text.PlainText
-                anchors.verticalCenter: parent.verticalCenter
-                text: "KDE Connect"
-                color: root.contentDim
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-                font.letterSpacing: 1
-                font.bold: true
-              }
             }
 
             Text {
