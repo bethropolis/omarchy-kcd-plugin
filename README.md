@@ -1,4 +1,8 @@
-# kcd Phone
+# Omarchy KCD
+
+[![License](https://img.shields.io/badge/License-MIT-F7DF1E?style=for-the-badge&logoColor=black)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Linux-6e40c9?style=for-the-badge&logoColor=white)](https://omarchy.org)
+[![Built for Omarchy: Plugin](https://raw.githubusercontent.com/tcballard/omarchy-badges/75975e5b5bf75e7ede3764bcd2950046f7abfe2c/badges/v1/omarchy-plugin.svg)](https://github.com/tcballard/omarchy-badges)
 
 An Omarchy Quattro `bar-widget` plugin for
 [`kcd`](https://github.com/bethropolis/kcd), a KDE Connect protocol
@@ -17,13 +21,13 @@ transport controls, and single-press quick actions.
 ## Requires
 
 * Omarchy Quattro (`omarchy-shell`)
-* `kcd` daemon with a paired phone (`systemctl --user start kcd`)
+* `kcd` daemon with a paired phone 
 
 ## Install
 
 ### kcd daemon
 
-This plugin is a frontend — install the daemon first.
+This plugin is a frontend, you neet to install the daemon first.
 
 #### Arch Linux
 
@@ -39,7 +43,7 @@ Then enable the user service so it starts on login:
 systemctl --user enable --now kcd
 ```
 
-For other distros, configuration, and protocol details, see the
+For other configurations and protocol details, see the
 official [`kcd` repo](https://github.com/bethropolis/kcd).
 
 ### Plugin
@@ -52,25 +56,30 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
 
 * Bar shows battery level (dimmed when offline). Left-click toggles the
   panel, middle-click refreshes.
-* Panel header — phone, link icon (tooltip shows the phone's reported
+
+* Panel header: phone, link icon (tooltip shows the phone's reported
   network type when available), battery, last-seen.
-* Media card — album art, title/artist, prev / play-pause / next, wave
+
+* Media card: album art, title/artist, prev / play-pause / next, wave
   seeker with smooth playhead.
-* Quick actions — **Ping**, **Ring**, **Clipboard**, **Share**,
+
+* Quick actions: **Ping**, **Ring**, **Clipboard**, **Share**,
   **Screenshot** (live). Share
   picks one file with the native chooser (`omarchy-file-select`) and sends
   it via `kcd share`, reporting back as a desktop notification.
   Screenshot captures the focused monitor with `grim` (after the panel
   hides itself) and sends the PNG the same way. Captures stage as
-  temporary `/tmp` files — never the cache dir — because `kcd share`
+  temporary `/tmp` files (never the cache dir) because `kcd share`
   returns on invitation while the daemon opens the file seconds later;
   the staged file is deleted on `share.complete` (stale ones pruned
   after an hour, the rest vanish on reboot), and the notification only
   claims success then.
+
 * No paired phone? **Start pairing** runs `kcd pair -y` (auto-accepts the
   first request, then stops). Daemon down? **Start daemon** starts it.
+
 * Footer gear opens `kcd.toml` in Neovim. Footer right shows the live
-  `kcd <version>` — click it to open `bethropolis/kcd` on GitHub.
+  `kcd <version>`; click it to open `bethropolis/kcd` on GitHub.
 
 ## How it works
 
@@ -97,3 +106,23 @@ bun test tests/
 | `kcd-screenshot-share.sh` | Screenshot flow: `grim` → `/tmp` stage → `kcd share` → delete on `share.complete` |
 | `tests/kcd.test.js` | Bun suite for the `Kcd.js` helpers (`bun test tests/`) |
 
+## Customization
+
+This repo bundles the official kcd client docs under `docs/`
+(`CLIENT_GUIDE.md`, `IPC_PROTOCOL.md`), so anyone can extend the panel
+with features skipped here. The pattern for a new quick action:
+
+1. Add an argv builder in `Kcd.js` next to `tileCommand` (pure function,
+   covered by `bun test tests/`).
+2. Add a `QuickTile` in `QuickActionsRow.qml` with a FontAwesome-range
+   glyph (the panel font lacks the Material block).
+3. Wire the signal through `Panel.qml` into a `KcdIo.qml` spawn function,
+   following `shareScreenshot()`.
+
+Long-running work (watch streams, pairing listen mode) belongs in
+managed `Process` blocks in `KcdIo.qml`. One-shot sends go through
+`Quickshell.execDetached` like the tile commands.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
