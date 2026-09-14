@@ -303,6 +303,14 @@ QtObject {
     Quickshell.execDetached(["bash", script, deviceId, deviceName])
   }
 
+  // screenshotShare() mirrors shareFile(): Panel.qml owns the deviceId
+  // guard and closes the panel first (grim must not catch it); the
+  // script waits out the hide animation itself before capturing.
+  function screenshotShare(deviceId, deviceName) {
+    var script = Quickshell.env("HOME") + "/.config/omarchy/plugins/bet.kcd/kcd-screenshot-share.sh"
+    Quickshell.execDetached(["bash", script, deviceId, deviceName])
+  }
+
 
 
   function mediaAction(action) {

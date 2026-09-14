@@ -63,6 +63,14 @@ Panel {
     io.shareFile(root.deviceId, root.deviceName)
   }
 
+  // shareScreenshot() splits at the same boundary: guard + close here
+  // (UI), capture-and-send in io (process spawn).
+  function shareScreenshot() {
+    if (root.deviceId === "") return
+    root.close()
+    io.screenshotShare(root.deviceId, root.deviceName)
+  }
+
   // ---- Panel theming (consumed by the UI sections below).
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property color contentDim: Qt.darker(contentForeground, 1.5)
@@ -200,6 +208,7 @@ Panel {
             fontFamily: root.contentFontFamily
             onTileTapped: function(tile) { root.runTile(tile) }
             onShareRequested: root.shareFile()
+            onScreenshotRequested: root.shareScreenshot()
           }
 
           // ---- State panels (exactly one is ever visible)

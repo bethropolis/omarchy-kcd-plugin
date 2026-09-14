@@ -297,6 +297,18 @@ function shareCommand(deviceId, filePath) {
   return ["kcd", "share", id, path]
 }
 
+// Screenshot-to-phone flow: Panel closes first, then
+// kcd-screenshot-share.sh captures (grim) and sends via `kcd share`.
+// The script path is resolved by the QML caller (it knows $HOME);
+// the [bash, script, id, name] shape is pinned here like shareCommand.
+function screenshotShareCommand(scriptPath, deviceId, deviceName) {
+  var script = String(scriptPath || "")
+  var id = String(deviceId || "")
+  var name = String(deviceName || "")
+  if (script === "" || id === "" || name === "") return null
+  return ["bash", script, id, name]
+}
+
 // Nerd Font battery ladder, same convention as omarchy.power: the icon
 // itself encodes level + charging, so no bolt emoji is ever needed.
 var BATTERY_CHARGING = ["󰢜", "󰂆", "󰂇", "󰂈", "󰢝", "󰂉", "󰢞", "󰂊", "󰂋", "󰂅"]
@@ -409,6 +421,7 @@ if (typeof module !== "undefined") {
     configTomlPath: configTomlPath,
     pairCommand: pairCommand,
     shareCommand: shareCommand,
+    screenshotShareCommand: screenshotShareCommand,
     stickDevice: stickDevice,
     isUsableArt: isUsableArt,
     parseWatchLine: parseWatchLine,

@@ -20,6 +20,7 @@ Or by hand:
 
 ```sh
 cp -r . ~/.config/omarchy/plugins/bet.kcd
+chmod +x ~/.config/omarchy/plugins/bet.kcd/*.sh
 omarchy-shell shell rescanPlugins
 omarchy plugin enable bet.kcd
 ```
@@ -32,10 +33,13 @@ omarchy plugin enable bet.kcd
   network type when available), battery, last-seen.
 * Media card — album art, title/artist, prev / play-pause / next, wave
   seeker with smooth playhead.
-* Quick actions — **Ping**, **Ring**, **Clipboard**, **Share** (live).
-  Text / Files are dimmed v2 placeholders. Share picks one file with the
-  native chooser (`omarchy-file-select`) and sends it via `kcd share`,
-  reporting back as a desktop notification.
+* Quick actions — **Ping**, **Ring**, **Clipboard**, **Share**,
+  **Screenshot** (live). Text / Files are dimmed v2 placeholders. Share
+  picks one file with the native chooser (`omarchy-file-select`) and sends
+  it via `kcd share`, reporting back as a desktop notification.
+  Screenshot captures the focused monitor with `grim` (after the panel
+  hides itself) and sends the PNG the same way; the `/tmp` capture is
+  always removed.
 * No paired phone? **Start pairing** runs `kcd pair -y` (auto-accepts the
   first request, then stops). Daemon down? **Start daemon** starts it.
 * Footer gear opens `kcd.toml` in Neovim. Footer right shows the live
@@ -59,3 +63,4 @@ testable under node).
 | `KcdMissing.qml` / `KcdUnpaired.qml` | Empty-state panels |
 | `Kcd.js` | Device/track/event parsing + CLI argv builders |
 | `kcd-share.sh` | Share flow: native pick → `kcd share` → notification |
+| `kcd-screenshot-share.sh` | Screenshot flow: `grim` capture → `kcd share` → notification |

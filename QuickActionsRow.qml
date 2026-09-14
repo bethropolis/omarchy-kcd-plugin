@@ -19,6 +19,7 @@ Column {
 
   signal tileTapped(string tile)   // "ping" | "ring" | "clipboard"
   signal shareRequested()
+  signal screenshotRequested()
 
   Text {
     textFormat: Text.PlainText
@@ -93,13 +94,24 @@ Column {
 
     QuickTile {
       width: parent.cellWidth
-      iconText: "󰒊"
+      iconText: ""
       label: "Share"
       tooltipText: "Send a file to " + actions.deviceName
       foreground: actions.foreground
       fontFamily: actions.fontFamily
       enabled: actions.liveConnected
       onTapped: actions.shareRequested()
+    }
+
+    QuickTile {
+      width: parent.cellWidth
+      iconText: ""
+      label: "Screenshot"
+      tooltipText: "Send a screenshot to " + actions.deviceName
+      foreground: actions.foreground
+      fontFamily: actions.fontFamily
+      enabled: actions.liveConnected
+      onTapped: actions.screenshotRequested()
     }
   }
 }
