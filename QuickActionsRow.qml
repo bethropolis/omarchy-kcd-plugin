@@ -2,10 +2,11 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// Quick-action tile grid (Step 1 of the Panel split): props in, signals
-// out. Tile enablement follows liveConnected; Text/Files stay dimmed v2
-// placeholders. Glyph codepoints are authoritative here — see Panel.qml
-// history, not REVIEW.md (whose snippets had them stripped).
+// Quick-action tiles: props in, signals out. Two rows — three compact
+// tiles, then Share + Screenshot stretched half-width so the grid stays
+// balanced. Tile enablement follows liveConnected. Glyph codepoints are
+// authoritative here — FontAwesome range only (the panel font lacks the
+// Material block, e.g. U+F048A renders blank).
 Column {
   id: actions
   width: parent.width
@@ -16,6 +17,7 @@ Column {
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.5)
+  readonly property real gap: Style.space(8)
 
   signal tileTapped(string tile)   // "ping" | "ring" | "clipboard"
   signal shareRequested()
@@ -31,13 +33,11 @@ Column {
     font.bold: true
   }
 
-  Grid {
+  Row {
     width: parent.width
-    columns: 3
-    rowSpacing: Style.space(8)
-    columnSpacing: Style.space(8)
+    spacing: actions.gap
 
-    property real cellWidth: Math.max(0, (width - columnSpacing * 2) / 3)
+    property real cellWidth: Math.max(0, (width - spacing * 2) / 3)
 
     QuickTile {
       width: parent.cellWidth
@@ -71,30 +71,17 @@ Column {
       enabled: actions.liveConnected
       onTapped: actions.tileTapped("clipboard")
     }
+  }
+
+  Row {
+    width: parent.width
+    spacing: actions.gap
+
+    property real cellWidth: Math.max(0, (width - spacing) / 2)
 
     QuickTile {
       width: parent.cellWidth
-      iconText: ""
-      label: "Text"
-      tooltipText: "SMS compose — v2"
-      foreground: actions.foreground
-      fontFamily: actions.fontFamily
-      enabled: false
-    }
-
-    QuickTile {
-      width: parent.cellWidth
-      iconText: ""
-      label: "Files"
-      tooltipText: "SFTP browse — v2"
-      foreground: actions.foreground
-      fontFamily: actions.fontFamily
-      enabled: false
-    }
-
-    QuickTile {
-      width: parent.cellWidth
-      iconText: ""
+      iconText: ""
       label: "Share"
       tooltipText: "Send a file to " + actions.deviceName
       foreground: actions.foreground
