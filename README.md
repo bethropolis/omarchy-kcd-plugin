@@ -1,8 +1,10 @@
 # Omarchy KCD
 
 [![License](https://img.shields.io/badge/License-MIT-F7DF1E?style=for-the-badge&logoColor=black)](LICENSE)
+[![Build](https://img.shields.io/github/actions/workflow/status/bethropolis/omarchy-kcd-plugin/test.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=build)](https://github.com/bethropolis/omarchy-kcd-plugin/actions)
 [![Platform](https://img.shields.io/badge/Platform-Linux-6e40c9?style=for-the-badge&logoColor=white)](https://omarchy.org)
 [![Built for Omarchy: Plugin](https://raw.githubusercontent.com/tcballard/omarchy-badges/75975e5b5bf75e7ede3764bcd2950046f7abfe2c/badges/v1/omarchy-plugin.svg)](https://github.com/tcballard/omarchy-badges)
+
 
 An Omarchy Quattro `bar-widget` plugin for
 [`kcd`](https://github.com/bethropolis/kcd), a KDE Connect protocol
