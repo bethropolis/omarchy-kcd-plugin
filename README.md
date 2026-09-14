@@ -129,6 +129,16 @@ Long-running work (watch streams, pairing listen mode) belongs in
 managed `Process` blocks in `KcdIo.qml`. One-shot sends go through
 `Quickshell.execDetached` like the tile commands.
 
+## Remove
+
+```sh
+omarchy plugin remove io.github.bethropolis.kcd
+```
+
+This deletes the plugin folder; the shell drops the bar widget
+automatically. The `kcd` daemon and its pairing stay installed, remove
+those separately if you no longer need them.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
