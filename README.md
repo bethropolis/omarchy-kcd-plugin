@@ -32,8 +32,10 @@ omarchy plugin enable bet.kcd
   network type when available), battery, last-seen.
 * Media card — album art, title/artist, prev / play-pause / next, wave
   seeker with smooth playhead.
-* Quick actions — **Ping**, **Ring**, **Clipboard** (live).
-  Text / Files / Share are dimmed v2 placeholders.
+* Quick actions — **Ping**, **Ring**, **Clipboard**, **Share** (live).
+  Text / Files are dimmed v2 placeholders. Share picks one file with the
+  native chooser (`omarchy-file-select`) and sends it via `kcd share`,
+  reporting back as a desktop notification.
 * No paired phone? **Start pairing** runs `kcd pair -y` (auto-accepts the
   first request, then stops). Daemon down? **Start daemon** starts it.
 * Footer gear opens `kcd.toml` in Neovim. Footer right shows the live
@@ -56,3 +58,4 @@ testable under node).
 | `QuickTile.qml` | Quick-action tile component (+ `accent` primary style) |
 | `KcdMissing.qml` / `KcdUnpaired.qml` | Empty-state panels |
 | `Kcd.js` | Device/track/event parsing + CLI argv builders |
+| `kcd-share.sh` | Share flow: native pick → `kcd share` → notification |

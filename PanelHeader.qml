@@ -23,6 +23,8 @@ Item {
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.5)
+  // Connection state follows the theme accent, like the media seeker.
+  property color accent: Color.accent
 
   Row {
     id: headerLeft
@@ -36,7 +38,7 @@ Item {
       text: "󰄜"
       color: header.foreground
       font.family: header.fontFamily
-      font.pixelSize: Style.font.title + 6
+      font.pixelSize: Style.font.title + 14
     }
 
     Column {
@@ -62,14 +64,14 @@ Item {
           width: Style.space(7)
           height: Style.space(7)
           radius: width / 2
-          color: header.liveConnected ? "#4ade80" : Qt.darker(header.foreground, 2.0)
+          color: header.liveConnected ? header.accent : Qt.darker(header.foreground, 2.0)
         }
 
         Text {
           textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           text: header.liveConnected ? "Connected" : "Offline"
-          color: header.liveConnected ? "#4ade80" : header.dim
+          color: header.liveConnected ? header.accent : header.dim
           font.family: header.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: true

@@ -131,6 +131,18 @@ function isUsableDevice(dev) {
   return String(dev.state || "").toUpperCase() === "PAIRED"
 }
 
+// First paired device regardless of connection. Used to tell "paired
+// but offline" (phone asleep, TCP down) apart from "never paired" —
+// the former needs patience, not another pair request.
+function pickPairedDevice(devices) {
+  if (!devices || devices.length === 0) return null
+  for (var i = 0; i < devices.length; i++) {
+    var dev = devices[i]
+    if (dev && String(dev.state || "").toUpperCase() === "PAIRED") return dev
+  }
+  return null
+}
+
 // Single-device framing: first paired+connected device wins, else null.
 // Mirrors `kcd devices --connected` (usable = paired+connected). Known but
 // unpaired/disconnected devices are NOT auto-selected — callers show the
@@ -275,6 +287,16 @@ function pairCommand() {
   return ["kcd", "pair", "-y"]
 }
 
+// `kcd share <id> <path>`: single file only, directories rejected by the
+// CLI. The argv contract kcd-share.sh fulfills (it invokes kcd directly);
+// kept here so the shape is pinned by a test like every other command.
+function shareCommand(deviceId, filePath) {
+  var id = String(deviceId || "")
+  var path = String(filePath || "")
+  if (id === "" || path === "") return null
+  return ["kcd", "share", id, path]
+}
+
 // Nerd Font battery ladder, same convention as omarchy.power: the icon
 // itself encodes level + charging, so no bolt emoji is ever needed.
 var BATTERY_CHARGING = ["󰢜", "󰂆", "󰂇", "󰂈", "󰢝", "󰂉", "󰢞", "󰂊", "󰂋", "󰂅"]
@@ -378,6 +400,7 @@ if (typeof module !== "undefined") {
     formatLastSeen: formatLastSeen,
     isFreshMedia: isFreshMedia,
     isUsableDevice: isUsableDevice,
+    pickPairedDevice: pickPairedDevice,
     pickAutoDevice: pickAutoDevice,
     normalizeTrack: normalizeTrack,
     parseMprisStatus: parseMprisStatus,
@@ -385,6 +408,7 @@ if (typeof module !== "undefined") {
     parseVersionOutput: parseVersionOutput,
     configTomlPath: configTomlPath,
     pairCommand: pairCommand,
+    shareCommand: shareCommand,
     stickDevice: stickDevice,
     isUsableArt: isUsableArt,
     parseWatchLine: parseWatchLine,
