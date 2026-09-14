@@ -2,8 +2,8 @@
 
 An Omarchy Quattro `bar-widget` plugin for
 [`kcd`](https://github.com/bethropolis/kcd), a KDE Connect protocol
-daemon written in Go. Surfaces your phone in the bar and in a Night
-Drive dashboard panel: device status, battery, now-playing card with
+daemon written in Go. Surfaces your phone in the bar and in a
+dashboard panel: device status, battery, now-playing card with
 transport controls, and single-press quick actions.
 
 
@@ -21,6 +21,29 @@ transport controls, and single-press quick actions.
 
 ## Install
 
+### kcd daemon
+
+This plugin is a frontend — install the daemon first.
+
+#### Arch Linux
+
+Install from the AUR using your preferred helper:
+
+```bash
+yay -S kcd-bin
+```
+
+Then enable the user service so it starts on login:
+
+```bash
+systemctl --user enable --now kcd
+```
+
+For other distros, configuration, and protocol details, see the
+official [`kcd` repo](https://github.com/bethropolis/kcd).
+
+### Plugin
+
 ```sh
 omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enable
 ```
@@ -34,7 +57,7 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
 * Media card — album art, title/artist, prev / play-pause / next, wave
   seeker with smooth playhead.
 * Quick actions — **Ping**, **Ring**, **Clipboard**, **Share**,
-  **Screenshot** (live). Text / Files are dimmed v2 placeholders. Share
+  **Screenshot** (live). Share
   picks one file with the native chooser (`omarchy-file-select`) and sends
   it via `kcd share`, reporting back as a desktop notification.
   Screenshot captures the focused monitor with `grim` (after the panel
