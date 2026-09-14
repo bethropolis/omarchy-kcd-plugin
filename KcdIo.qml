@@ -40,7 +40,9 @@ QtObject {
   readonly property double displayPos: io.anchorPos()
   property string lastSeenText: "—"
   property string daemonText: "starting…"
-  property string kcdVersion: "v0.1.0"
+  // "—" until the version probe lands: never a fake version. In the
+  // missing state the footer reads "kcd —".
+  property string kcdVersion: "—"
   property bool versionOk: false
   property bool installOk: false
   property bool installProbed: false
@@ -110,11 +112,15 @@ QtObject {
     var force = forceDevices !== false
     io.ioStartMs = Date.now()
     if (!versionProc.running && !io.versionOk) {
-      versionProc.command = ["kcd", "--version"]
+      // Wrapped in sh so the spawn always reports an exit: a missing kcd
+      // binary fails the spawn itself (no onExited), which used to wedge
+      // the probes and strand the panel in zombie "ready". sh exits 127
+      // instead, completing the probe as "missing".
+      versionProc.command = ["sh", "-c", "kcd --version"]
       versionProc.running = true
     }
     if (!devicesProc.running && (force || Date.now() - io.devicesRxMs > 120000)) {
-      devicesProc.command = ["kcd", "devices", "--json"]
+      devicesProc.command = ["sh", "-c", "kcd devices --json"]
       devicesProc.running = true
     }
     io.fillGaps()
@@ -374,14 +380,11 @@ QtObject {
     }
   }
 
-  // Slow re-probe so installing kcd (or the daemon returning) is picked
-  // up without reopening the panel. Watch events cover the rest.
-  property Timer stateReprobe: Timer {
-    interval: 30000
-    repeat: true
-    running: !io.installOk || !io.daemonUp
-    onTriggered: io.refresh()
-  }
+  // Panel-open and retry-tap refreshes (plus the watch lifecycle
+  // below) are the only re-probe paths: installing kcd is picked up on
+  // the next open or retry, and the daemon's return arrives as a watch
+  // snapshot. No background timer — an unhealthy plugin spawns nothing
+  // while the panel is closed.
 
   // Runs only while the binary exists; the CLI itself backs off and
   // reconnects while the daemon is down. `watchAlive` (never `running`
@@ -394,6 +397,10 @@ QtObject {
     }
     onExited: function(exitCode) {
       io.watchAlive = false
+      // A dead watch stream means the daemon is unreachable — mark it
+      // down immediately (event-driven; no poll). The snapshot on
+      // reconnect sets it back.
+      io.daemonUp = false
       if (io.installOk) {
         io.daemonText = "kcd — reconnecting…"
         io.watchBackoffMs = Math.min(io.watchBackoffMs * 2, 30000)
