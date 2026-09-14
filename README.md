@@ -60,7 +60,11 @@ omarchy plugin enable io.github.bethropolis.kcd
 The panel boots from one `kcd watch --json` snapshot (devices + battery +
 media), then stays live on watch events. Position is drift-free math from
 the daemon's anchor stamp. Pure parsing lives in `Kcd.js` (Qt-free,
-testable under node).
+testable under node):
+
+```sh
+bun test tests/
+```
 
 ## Files
 
