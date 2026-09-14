@@ -2,7 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// One Night Drive quick-action tile: icon glyph over a small label.
+// One quick-action tile: icon glyph over a small label.
 // Disabled tiles render dimmed and ignore clicks (v2 placeholders).
 Rectangle {
   id: root

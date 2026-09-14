@@ -6,6 +6,14 @@ daemon written in Go. Surfaces your phone in the bar and in a Night
 Drive dashboard panel: device status, battery, now-playing card with
 transport controls, and single-press quick actions.
 
+
+## Previews
+
+| Catppuccin | Flexoki | Vantablack |
+|---|---|---|
+| ![Catppuccin](docs/previews/catppuccin.png) | ![Flexoki](docs/previews/flexoki.png) | ![Vantablack](docs/previews/vantablack.png) |
+
+
 ## Requires
 
 * Omarchy Quattro (`omarchy-shell`)
@@ -15,20 +23,6 @@ transport controls, and single-press quick actions.
 
 ```sh
 omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enable
-```
-
-Or by hand (explicit file list, so no `.git` ships with the plugin):
-
-```sh
-PLUGIN=~/.config/omarchy/plugins/io.github.bethropolis.kcd
-mkdir -p "$PLUGIN"
-cp manifest.json BarWidget.qml Panel.qml KcdIo.qml Kcd.js KcdMissing.qml \
-  KcdUnpaired.qml MediaCard.qml PanelHeader.qml QuickActionsRow.qml \
-  QuickTile.qml README.md LICENSE kcd-share.sh kcd-screenshot-share.sh \
-  preview.png "$PLUGIN/"
-chmod +x "$PLUGIN"/*.sh
-omarchy-shell shell rescanPlugins
-omarchy plugin enable io.github.bethropolis.kcd
 ```
 
 ## Usage
@@ -72,7 +66,7 @@ bun test tests/
 |---|---|
 | `manifest.json` | Plugin contract (`bar-widget` → `BarWidget.qml`) |
 | `BarWidget.qml` | Bar button, mirrors panel state |
-| `Panel.qml` | Night Drive dashboard, owns all kcd IO |
+| `Panel.qml` | Dashboard panel, owns all kcd IO |
 | `QuickTile.qml` | Quick-action tile component (+ `accent` primary style) |
 | `KcdMissing.qml` / `KcdUnpaired.qml` | Empty-state panels |
 | `Kcd.js` | Device/track/event parsing + CLI argv builders |
@@ -80,8 +74,3 @@ bun test tests/
 | `kcd-screenshot-share.sh` | Screenshot flow: `grim` → `/tmp` stage → `kcd share` → delete on `share.complete` |
 | `tests/kcd.test.js` | Bun suite for the `Kcd.js` helpers (`bun test tests/`) |
 
-## Previews
-
-| Catppuccin | Flexoki | Vantablack |
-|---|---|---|
-| ![Catppuccin](docs/previews/catppuccin.png) | ![Flexoki](docs/previews/flexoki.png) | ![Vantablack](docs/previews/vantablack.png) |

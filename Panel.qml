@@ -4,7 +4,7 @@ import qs.Commons
 import qs.Ui
 import "Kcd.js" as Kcd
 
-// Night Drive dashboard for kcd (redesigned per REVIEW.md + design.svg):
+// Dashboard panel for kcd:
 // auto-selected paired phone, battery, compact 120px media card with transport
 // cluster and Canvas wave seeker, quick-action tiles, version footer.
 Panel {

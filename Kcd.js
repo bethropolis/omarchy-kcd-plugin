@@ -1,4 +1,4 @@
-// Pure kcd data helpers for the Night Drive panel.
+// Pure kcd data helpers for the panel.
 // Qt-free so it can be unit tested under node; QML owns all Process IO.
 //
 // Two wire shapes exist and both must be handled:
