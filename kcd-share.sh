@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# bet.kcd: pick one local file and send it to a paired phone via kcd share.
+# io.github.bethropolis.kcd: pick one local file and send it to a paired phone via kcd share.
 # Usage: kcd-share.sh <device-id> <device-name>
 #
 # The panel closes itself before this runs (the portal chooser takes over),

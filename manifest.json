@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "id": "bet.kcd",
-  "name": "KDE Connect",
-  "version": "0.1.0",
-  "author": "bet",
+  "id": "io.github.bethropolis.kcd",
+  "name": "kcd Phone",
+  "version": "1.0.0",
+  "author": "bethropolis",
   "license": "MIT",
-  "description": "Night Drive dashboard for kcd: phone status, battery, now-playing controls, and quick actions (ping, ring, clipboard).",
+  "description": "Bar widget and dashboard for kcd, a KDE Connect protocol daemon written in Go: phone status, battery, now-playing controls, file share, and screenshot-to-phone.",
   "kinds": [
     "bar-widget"
   ],
@@ -13,8 +13,8 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "KDE Connect",
-    "description": "Phone status, battery, and media controls via kcd",
+    "displayName": "kcd Phone",
+    "description": "Phone status, battery, media, share and screenshots via kcd",
     "category": "Phone",
     "allowMultiple": false,
     "defaultSection": "right"

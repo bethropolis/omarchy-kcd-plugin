@@ -41,7 +41,7 @@ Column {
     width: parent.width
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.WordWrap
-    text: "The KDE Connect panel needs the kcd daemon. Install it, then tap Retry."
+    text: "This panel needs the kcd daemon. Install it, then tap Retry."
     color: Qt.darker(root.foreground, 1.4)
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall

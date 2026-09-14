@@ -289,7 +289,7 @@ function pairCommand() {
 
 // `kcd share <id> <path>`: single file only, directories rejected by the
 // CLI. The argv contract kcd-share.sh fulfills (it invokes kcd directly);
-// kept here so the shape is pinned by a test like every other command.
+// spelled out here next to every other command builder.
 function shareCommand(deviceId, filePath) {
   var id = String(deviceId || "")
   var path = String(filePath || "")
@@ -300,7 +300,8 @@ function shareCommand(deviceId, filePath) {
 // Screenshot-to-phone flow: Panel closes first, then
 // kcd-screenshot-share.sh captures (grim) and sends via `kcd share`.
 // The script path is resolved by the QML caller (it knows $HOME);
-// the [bash, script, id, name] shape is pinned here like shareCommand.
+// the [bash, script, id, name] shape is spelled out here next to every
+// other command builder.
 function screenshotShareCommand(scriptPath, deviceId, deviceName) {
   var script = String(scriptPath || "")
   var id = String(deviceId || "")

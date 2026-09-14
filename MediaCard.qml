@@ -260,13 +260,13 @@ Rectangle {
         // Paint in device pixels so the wave stays crisp.
         canvasSize: Qt.size(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)))
 
-          property real progressVal: Kcd.progress(card.displayPos, card.trackLength)
-          // Local mirror so a theme-accent change repaints even when paused.
-          property color accent: card.accent
-          onProgressValChanged: requestPaint()
-          onWidthChanged: requestPaint()
-          onCanvasSizeChanged: requestPaint()
-          onAccentChanged: requestPaint()
+        property real progressVal: Kcd.progress(card.displayPos, card.trackLength)
+        // Local mirror so a theme-accent change repaints even when paused.
+        property color accent: card.accent
+        onProgressValChanged: requestPaint()
+        onWidthChanged: requestPaint()
+        onCanvasSizeChanged: requestPaint()
+        onAccentChanged: requestPaint()
 
         onPaint: {
           var ctx = getContext("2d")
@@ -302,10 +302,10 @@ Rectangle {
             }
             ctx.stroke()
 
-                      // 3. Playhead knob (contrasting tone, readable on the wave)
-                      var knobY = midY + Math.sin((currentX / wavelength) * 2 * Math.PI) * amplitude
-                      ctx.beginPath()
-                      ctx.fillStyle = card.onAccent
+            // 3. Playhead knob (contrasting tone, readable on the wave)
+            var knobY = midY + Math.sin((currentX / wavelength) * 2 * Math.PI) * amplitude
+            ctx.beginPath()
+            ctx.fillStyle = card.onAccent
             ctx.arc(currentX, knobY, 4, 0, 2 * Math.PI)
             ctx.fill()
           }

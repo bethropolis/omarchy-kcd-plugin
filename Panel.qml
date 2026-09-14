@@ -9,8 +9,8 @@ import "Kcd.js" as Kcd
 // cluster and Canvas wave seeker, quick-action tiles, version footer.
 Panel {
   id: root
-  moduleName: "bet.kcd"
-  ipcTarget: "bet.kcd"
+  moduleName: "io.github.bethropolis.kcd"
+  ipcTarget: "io.github.bethropolis.kcd"
   manageIpc: false
 
   property var anchorItem: null

@@ -1,7 +1,8 @@
-# KDE Connect — Night Drive dashboard for Omarchy
+# kcd Phone
 
-An Omarchy Quattro `bar-widget` plugin that surfaces your phone (via
-[`kcd`](https://github.com/bethropolis/kcd)) in the bar and in a Night
+An Omarchy Quattro `bar-widget` plugin for
+[`kcd`](https://github.com/bethropolis/kcd), a KDE Connect protocol
+daemon written in Go. Surfaces your phone in the bar and in a Night
 Drive dashboard panel: device status, battery, now-playing card with
 transport controls, and single-press quick actions.
 
@@ -16,13 +17,18 @@ transport controls, and single-press quick actions.
 omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enable
 ```
 
-Or by hand:
+Or by hand (explicit file list, so no `.git` ships with the plugin):
 
 ```sh
-cp -r . ~/.config/omarchy/plugins/bet.kcd
-chmod +x ~/.config/omarchy/plugins/bet.kcd/*.sh
+PLUGIN=~/.config/omarchy/plugins/io.github.bethropolis.kcd
+mkdir -p "$PLUGIN"
+cp manifest.json BarWidget.qml Panel.qml KcdIo.qml Kcd.js KcdMissing.qml \
+  KcdUnpaired.qml MediaCard.qml PanelHeader.qml QuickActionsRow.qml \
+  QuickTile.qml README.md LICENSE kcd-share.sh kcd-screenshot-share.sh \
+  preview.png "$PLUGIN/"
+chmod +x "$PLUGIN"/*.sh
 omarchy-shell shell rescanPlugins
-omarchy plugin enable bet.kcd
+omarchy plugin enable io.github.bethropolis.kcd
 ```
 
 ## Usage

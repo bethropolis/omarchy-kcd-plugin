@@ -10,7 +10,7 @@ import qs.Ui
 // pattern.
 BarWidget {
   id: root
-  moduleName: "bet.kcd"
+  moduleName: "io.github.bethropolis.kcd"
 
   readonly property string panelLabel: panelLoader.item ? String(panelLoader.item.barLabel || "") : ""
   readonly property string panelTooltip: panelLoader.item ? String(panelLoader.item.barTooltip || "") : ""
@@ -69,7 +69,7 @@ BarWidget {
   }
 
   // Summon/hide/toggle routing reaches the panel through the functions
-  // above (Bar.findPanelWidget); no IpcHandler here so target bet.kcd is
+  // above (Bar.findPanelWidget); no IpcHandler here so the panel target is
   // registered exactly once (Panel base owns it, weather pattern).
 
   WidgetButton {
@@ -78,7 +78,7 @@ BarWidget {
     bar: root.bar
     text: root.panelLabel !== "" ? root.panelLabel : "󰄜 --"
     dimmed: !root.panelConnected
-    tooltipText: root.panelTooltip !== "" ? root.panelTooltip : "KDE Connect"
+    tooltipText: root.panelTooltip !== "" ? root.panelTooltip : "kcd Phone"
     horizontalMargin: 8.75
     verticalPadding: 8.75
 

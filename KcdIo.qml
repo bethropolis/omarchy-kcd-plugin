@@ -14,6 +14,10 @@ QtObject {
   // Input from Panel.qml (posTicker needs it; everything else is push).
   property bool panelOpen: false
 
+  // Installed location of this plugin (scripts live beside the QML).
+  // Single source so the spawn halves below can't drift apart.
+  readonly property string pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/io.github.bethropolis.kcd"
+
   // ---- State
   property var devices: []
   readonly property var autoDevice: Kcd.pickAutoDevice(devices)
@@ -88,10 +92,10 @@ QtObject {
     return Kcd.batteryIcon(batteryCharge, batteryCharging) + " " + batteryCharge + "%"
   }
   readonly property string barTooltip: {
-    if (io.installProbed && !io.installOk) return "KDE Connect — kcd not installed"
+    if (io.installProbed && !io.installOk) return "kcd Phone — kcd not installed"
     if (!autoDevice) {
       if (io.pairedDevice) return io.pairedName + " — offline (asleep?)"
-      return io.daemonUp && devices.length > 0 ? "KDE Connect — no paired phone" : "KDE Connect — no phone"
+      return io.daemonUp && devices.length > 0 ? "kcd Phone — no paired phone" : "kcd Phone — no phone"
     }
     var tip = deviceName + (io.liveConnected ? " — connected" : " — offline")
     if (io.daemonProbed && !io.daemonUp) tip += " (daemon not running)"
@@ -163,7 +167,6 @@ QtObject {
     daemonProc.command = ["systemctl", "--user", "start", "kcd"]
     daemonProc.running = true
   }
-
 
   function onDevicesOutput(text) {
     io.daemonUp = true
@@ -299,16 +302,14 @@ QtObject {
   // over from there). Invoked through bash so a lost exec bit on deploy
   // can never break it.
   function shareFile(deviceId, deviceName) {
-    var script = Quickshell.env("HOME") + "/.config/omarchy/plugins/bet.kcd/kcd-share.sh"
-    Quickshell.execDetached(["bash", script, deviceId, deviceName])
+    Quickshell.execDetached(["bash", io.pluginDir + "/kcd-share.sh", deviceId, deviceName])
   }
 
   // screenshotShare() mirrors shareFile(): Panel.qml owns the deviceId
   // guard and closes the panel first (grim must not catch it); the
   // script waits out the hide animation itself before capturing.
   function screenshotShare(deviceId, deviceName) {
-    var script = Quickshell.env("HOME") + "/.config/omarchy/plugins/bet.kcd/kcd-screenshot-share.sh"
-    Quickshell.execDetached(["bash", script, deviceId, deviceName])
+    Quickshell.execDetached(["bash", io.pluginDir + "/kcd-screenshot-share.sh", deviceId, deviceName])
   }
 
 

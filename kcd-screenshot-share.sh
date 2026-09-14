@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# bet.kcd: capture the focused monitor and send it to a paired phone via kcd share.
+# io.github.bethropolis.kcd: capture the focused monitor and send it to a paired phone via kcd share.
 # Usage: kcd-screenshot-share.sh <device-id> <device-name>
 #
 # The panel closes itself before this runs (grim must not catch it), so
@@ -77,7 +77,7 @@ fi
 # Wait for the terminal event for THIS file (ack line + unrelated events
 # skipped). Timeout leaves the staged file for the 1h prune pass (and
 # /tmp itself on reboot) so a late phone can still complete the pull.
-result=$(timeout 90 kcd watch --json '["share.complete"]' 2>/dev/null | python3 -c '
+timeout 90 kcd watch --json '["share.complete"]' 2>/dev/null | python3 -c '
 import json, sys
 want = sys.argv[1]
 for line in sys.stdin:
