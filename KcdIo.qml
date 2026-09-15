@@ -130,8 +130,9 @@ QtObject {
     io.fillGaps()
   }
 
-  // One-shot fallbacks for anything the summary/snapshot didn't hydrate
-  // (cold daemon caches): battery and media only, never unconditionally.
+  // One-shot fallbacks for anything the intake didn't hydrate:
+  // devices one-shots embed no battery/media (the top-up in
+  // applyDeviceList covers those); this covers the remaining paths.
   // Stamps ioStartMs when it launches so late-cycle spawns get a full
   // wedge-guard budget.
   function fillGaps() {
@@ -142,14 +143,14 @@ QtObject {
     io.ioStartMs = Date.now()
     if (needBattery) io.refreshBattery()
     if (needMpris) {
-      mprisProc.command = ["kcd", "mpris", "status", "--json"]
+      mprisProc.command = ["sh", "-c", "kcd mpris status --json"]
       mprisProc.running = true
     }
   }
 
   function refreshBattery() {
     if (batteryProc.running || io.deviceId === "" || !io.daemonUp) return
-    batteryProc.command = ["kcd", "battery", "--json", io.deviceId]
+    batteryProc.command = ["sh", "-c", "kcd battery --json '" + io.deviceId + "'"]
     batteryProc.running = true
   }
 
@@ -206,6 +207,15 @@ QtObject {
         io.batteryCharging = ad.battery.charging === true
       }
       if (ad.media && Kcd.isFreshMedia(ad.media)) io.setTrack(ad.media)
+      // Devices one-shots embed no battery/media (unlike snapshots): top
+      // them up so a stale or poisoned value heals on intake instead of
+      // waiting for a change event that never comes at steady state.
+      // User/open-driven, overlap-guarded; snapshot intakes skip (embedded).
+      if (!ad.battery && !batteryProc.running) io.refreshBattery()
+      if (!ad.media && !mprisProc.running) {
+        mprisProc.command = ["sh", "-c", "kcd mpris status --json"]
+        mprisProc.running = true
+      }
       // A connected phone is seen now by definition (TCP up, packets
       // flowing) — the daemon stamp only moves on (re)connect, so it
       // would age while the phone sits next to you.
@@ -358,6 +368,39 @@ QtObject {
     }
   }
 
+  // Spawn watchdog: a watch (re)start that yields no line within 10s is a
+  // silent spawn failure (missing binary reports no exit, wedging
+  // running=true with no process and no retry). Force it through the
+  // normal exit path so backoff engages. Disarmed by the first line, so
+  // steady state adds zero timers; every (re)start begins with a daemon
+  // dump, so a quiet-but-live stream still disarms immediately.
+  property Timer watchStreamGuard: Timer {
+    interval: 10000
+    repeat: false
+    onTriggered: {
+      io.watchProc.running = false
+      io.noteWatchFailure()
+    }
+  }
+
+  // First watch line: stream is real — disarm the guard.
+  function noteWatchLine() {
+    io.watchStreamGuard.stop()
+  }
+
+  // Shared watch-death path (real exits via onExited, silent failures via
+  // the guard above): mark down immediately, back off, retry while the
+  // binary is installed. Per-open version probes keep installOk truthful,
+  // so a missing binary quiets the loop on the next open.
+  function noteWatchFailure() {
+    io.watchAlive = false
+    io.daemonUp = false
+    if (!io.installOk) return
+    io.daemonText = "kcd — reconnecting…"
+    io.watchBackoffMs = Math.min(io.watchBackoffMs * 2, 30000)
+    io.watchRestartTimer.restart()
+  }
+
   // Wedge guard: a one-shot that hasn't returned 20s after launch is
   // reaped and its probe marked done, so a dead spawn can never block
   // all future refreshes. Slow successes correct the flags on arrival.
@@ -384,11 +427,11 @@ QtObject {
     }
   }
 
-  // Panel-open and retry-tap refreshes (plus the watch lifecycle
-  // below) are the only re-probe paths: installing kcd is picked up on
-  // the next open or retry, and the daemon's return arrives as a watch
-  // snapshot. No background timer — an unhealthy plugin spawns nothing
-  // while the panel is closed.
+  // Panel-open and retry-tap refreshes, intake top-ups, and the watch
+  // lifecycle (plus its spawn guard) are the only re-probe paths:
+  // installing kcd is picked up on the next open or retry, and the
+  // daemon's return arrives as a watch snapshot. No background timer —
+  // an unhealthy plugin spawns nothing while the panel is closed.
 
   // Runs only while the binary exists; the CLI itself backs off and
   // reconnects while the daemon is down. `watchAlive` (never `running`
@@ -397,19 +440,13 @@ QtObject {
     running: io.installOk && io.watchAlive
     command: ["kcd", "watch", "--json", "--events", "device.connected,device.disconnected,battery.update,mpris.update,pair.accepted,pair.requested,pair.rejected"]
     stdout: SplitParser {
-      onRead: function(data) { io.handleWatchLine(data) }
+      onRead: function(data) { io.noteWatchLine(); io.handleWatchLine(data) }
+    }
+    onRunningChanged: {
+      if (running) io.watchStreamGuard.restart()
     }
     onExited: function(exitCode) {
-      io.watchAlive = false
-      // A dead watch stream means the daemon is unreachable — mark it
-      // down immediately (event-driven; no poll). The snapshot on
-      // reconnect sets it back.
-      io.daemonUp = false
-      if (io.installOk) {
-        io.daemonText = "kcd — reconnecting…"
-        io.watchBackoffMs = Math.min(io.watchBackoffMs * 2, 30000)
-        io.watchRestartTimer.restart()
-      }
+      io.noteWatchFailure()
     }
   }
 
