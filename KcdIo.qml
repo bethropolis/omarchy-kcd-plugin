@@ -287,10 +287,9 @@ QtObject {
     if (!event || !event.type) return
     var type = event.type
     if (type === "device.connected") {
-      io.lastSeenText = "Now"
-      io.refresh()
+      io.handleDeviceConnected(event.deviceId, event.timestamp)
     } else if (type === "device.disconnected") {
-      io.refresh()
+      io.handleDeviceDisconnected(event.deviceId, event.timestamp)
     } else if (type === "pair.accepted" || type === "pair.requested" || type === "pair.rejected") {
       io.refresh()
     } else if (type === "state.snapshot") {
@@ -310,6 +309,62 @@ QtObject {
       if (io.deviceId !== "" && event.deviceId !== io.deviceId) return
       io.setTrack(Kcd.normalizeTrack(event.payload))
     }
+  }
+
+  // Instant 0ms connect/disconnect handling: the watch event mutates the
+  // in-memory devices list directly instead of waiting a 100-300ms CLI
+  // round-trip (and refresh() would skip the spawn entirely when
+  // devicesProc was already running). refresh(true) after the fact only
+  // re-syncs names/battery for full daemon parity.
+  function handleDeviceDisconnected(id, timestamp) {
+    if (!id) return
+    var updated = []
+    var found = false
+    for (var i = 0; i < io.devices.length; i++) {
+      var d = Object.assign({}, io.devices[i])
+      if (d.id === id) {
+        d.connected = false
+        if (timestamp) d.lastSeen = timestamp
+        found = true
+      }
+      updated.push(d)
+    }
+    if (!found) {
+      io.refresh(true)
+      return
+    }
+    io.devices = updated
+    if (io.deviceId === id) {
+      io.lastSeenText = timestamp ? Kcd.formatLastSeen(timestamp) : "Just now"
+      // Freeze media so the playhead can't ghost-creep on an offline
+      // phone (daemonUp stays true; liveTrack gating can't do this).
+      io.track = null
+    }
+    io.refresh(true)
+  }
+
+  function handleDeviceConnected(id, timestamp) {
+    if (!id) return
+    var updated = []
+    var found = false
+    for (var i = 0; i < io.devices.length; i++) {
+      var d = Object.assign({}, io.devices[i])
+      if (d.id === id) {
+        d.connected = true
+        d.lastSeen = timestamp || new Date().toISOString()
+        found = true
+      }
+      updated.push(d)
+    }
+    if (!found) {
+      io.refresh(true)
+      return
+    }
+    io.devices = updated
+    if (io.deviceId === id) {
+      io.lastSeenText = "Now"
+    }
+    io.refresh(true)
   }
 
   function runTile(tile) {
