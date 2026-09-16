@@ -396,11 +396,12 @@ function stickDevice(devices, id) {
 }
 
 // Parse `kcd --version` output, e.g.
-// "kcd version v1.17.0 (commit 6bd0d7a, built 2026-09-12T07:13:42Z)".
-// Returns "v1.17.0" or null.
+// "kcd version v1.17.0 (commit 6bd0d7a, ...)" or the newer v-unprefixed
+// "kcd version 1.18.0 (commit 8126626, ...)".
+// Returns "vX.Y.Z" (normalized with v prefix) or null.
 function parseVersionOutput(text) {
-  var m = String(text || "").match(/v\d+\.\d+\.\d+/)
-  return m ? m[0] : null
+  var m = String(text || "").match(/v?(\d+\.\d+\.\d+)/)
+  return m ? "v" + m[1] : null
 }
 
 if (typeof module !== "undefined") {

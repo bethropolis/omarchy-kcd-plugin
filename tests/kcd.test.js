@@ -235,6 +235,7 @@ describe("battery + misc display", () => {
 
   it("parseVersionOutput and formatLastSeen", () => {
     expect(Kcd.parseVersionOutput("kcd version v1.17.0 (commit x)")).toBe("v1.17.0");
+    expect(Kcd.parseVersionOutput("kcd version 1.18.0 (commit 8126626e4c2c16787f7cfea68e51bae6af42f195, built 2026-09-15T23:05:40Z)")).toBe("v1.18.0");
     expect(Kcd.parseVersionOutput("nothing")).toBeNull();
     expect(Kcd.formatLastSeen("garbage")).toBe("—");
     expect(Kcd.formatLastSeen(new Date().toISOString())).toBe("Now");
