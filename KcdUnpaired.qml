@@ -82,7 +82,7 @@ Column {
       width: (parent.width - parent.spacing) / 2
       iconText: root.isDown ? "" : ""
       label: root.isDown ? (root.startingDaemon ? "Starting…" : "Start daemon") : (root.pairing ? "Pairing…" : "Start pairing")
-      tooltipText: root.isDown ? "Start the kcd user service" : (root.pairing ? "Pairing mode on — tap to cancel" : "Listen for pair requests, auto-accept first")
+      tooltipText: root.isDown ? "Prime the kcd socket — the daemon starts on demand" : (root.pairing ? "Pairing mode on — tap to cancel" : "Listen for pair requests, auto-accept first")
       foreground: root.foreground
       fontFamily: root.fontFamily
       accent: true

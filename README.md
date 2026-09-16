@@ -23,13 +23,13 @@ transport controls, and single-press quick actions.
 ## Requires
 
 * Omarchy Quattro (`omarchy-shell`)
-* `kcd` daemon with a paired phone 
+* `kcd` daemon >= 1.18.0 with a paired phone
 
 ## Install
 
 ### kcd daemon
 
-This plugin is a frontend, you neet to install the daemon first.
+This plugin is a frontend, you need to install the daemon first.
 
 #### Arch Linux
 
@@ -39,11 +39,15 @@ Install from the AUR using your preferred helper:
 yay -S kcd-bin
 ```
 
-Then enable the user service so it starts on login:
+Then enable the socket so the daemon starts on demand at login
+(the service unit stays installed for activation, but disabled):
 
 ```bash
-systemctl --user enable --now kcd
+systemctl --user enable --now kcd.socket
 ```
+
+Cold client commands (including this panel's probes) summon the daemon
+on first use, so there is normally nothing to start by hand.
 
 For other configurations and protocol details, see the
 official [`kcd` repo](https://github.com/bethropolis/kcd).
@@ -78,7 +82,8 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
   claims success then.
 
 * No paired phone? **Start pairing** runs `kcd pair -y` (auto-accepts the
-  first request, then stops). Daemon down? **Start daemon** starts it.
+  first request, then stops). Daemon down? **Start daemon** primes the
+  socket, then the next probe wakes the daemon on its own.
 
 * Footer gear opens `kcd.toml` in Neovim. Footer right shows the live
   `kcd <version>`; click it to open `bethropolis/kcd` on GitHub.

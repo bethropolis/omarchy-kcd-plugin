@@ -170,12 +170,14 @@ QtObject {
     pairProc.running = true
   }
 
-  // One-click daemon start: `systemctl --user start kcd` is idempotent
-  // (no-op if already running). onExited re-probes, so the panel leaves
-  // the down state on its own once the daemon answers.
+  // One-click daemon start: primes `kcd.socket` (kcd >= 1.18 ships the
+  // socket unit; the service unit stays installed for activation).
+  // systemctl is idempotent (no-op if already up). The next probe/watch
+  // connect then summons the daemon on demand; onExited re-probes, so
+  // the panel leaves the down state on its own once it answers.
   function startDaemon() {
     if (daemonProc.running || !io.installOk) return
-    daemonProc.command = ["systemctl", "--user", "start", "kcd"]
+    daemonProc.command = ["systemctl", "--user", "start", "kcd.socket"]
     daemonProc.running = true
   }
 
@@ -489,9 +491,14 @@ QtObject {
     }
     onExited: function(exitCode) {
       io.installProbed = true
+      // Installed-ness comes from the exit code alone: exit 0 means the
+      // binary runs. The version string only feeds the footer — a future
+      // format change must never strand the panel in "missing" again.
       if (exitCode !== 0) {
         io.installOk = false
         io.versionOk = false
+      } else {
+        io.installOk = true
       }
     }
   }
