@@ -150,7 +150,8 @@ QtObject {
 
   function refreshBattery() {
     if (batteryProc.running || io.deviceId === "" || !io.daemonUp) return
-    batteryProc.command = ["sh", "-c", "kcd battery --json '" + io.deviceId + "'"]
+    // Argv array, never a shell: deviceId is daemon-supplied and untrusted.
+    batteryProc.command = ["kcd", "battery", "--json", io.deviceId]
     batteryProc.running = true
   }
 

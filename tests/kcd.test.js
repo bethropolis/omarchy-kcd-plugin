@@ -42,6 +42,27 @@ describe("normalizeDevice", () => {
     expect(d.state).toBe("UNKNOWN");
     expect(d.connected).toBe(false);
   });
+
+  it("isSafeDeviceId admits real ID shapes, rejects shell metacharacters", () => {
+    expect(Kcd.isSafeDeviceId("9a5c23ea_7195_4da1_b766_282b7256a02d")).toBe(true);
+    expect(Kcd.isSafeDeviceId("abc")).toBe(true);
+    expect(Kcd.isSafeDeviceId("phone-1:2.3")).toBe(true);
+    expect(Kcd.isSafeDeviceId("x'; rm -rf ~; echo '")).toBe(false);
+    expect(Kcd.isSafeDeviceId("a;id")).toBe(false);
+    expect(Kcd.isSafeDeviceId("$(id)")).toBe(false);
+    expect(Kcd.isSafeDeviceId("`id`")).toBe(false);
+    expect(Kcd.isSafeDeviceId("a b")).toBe(false);
+    expect(Kcd.isSafeDeviceId("")).toBe(false);
+    expect(Kcd.isSafeDeviceId(null)).toBe(false);
+  });
+
+  it("drops hostile-ID devices at intake", () => {
+    expect(Kcd.normalizeDevice({ id: "x'; touch /tmp/pwned; echo '" })).toBeNull();
+    expect(Kcd.normalizeDevices([
+      { id: "abc", state: "PAIRED", connected: true },
+      { id: "x'; touch /tmp/pwned; echo '", state: "PAIRED", connected: true },
+    ]).map((d) => d.id)).toEqual(["abc"]);
+  });
 });
 
 describe("parseDevicesOutput / normalizeDevices", () => {

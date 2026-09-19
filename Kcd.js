@@ -8,6 +8,12 @@
 //     (id, name, state, connected).
 // Normalize everything to { id, name, type, state, connected } here.
 
+// Device IDs are daemon-supplied and untrusted: never let one reach a
+// shell. Real IDs are UUID-shaped hex with underscores.
+function isSafeDeviceId(id) {
+  return /^[A-Za-z0-9_.:-]+$/.test(String(id || ""))
+}
+
 // Normalize one device entry from either wire shape.
 function normalizeDevice(entry) {
   if (!entry || typeof entry !== "object") return null
@@ -17,6 +23,7 @@ function normalizeDevice(entry) {
   var state = entry.state !== undefined && entry.state !== null ? entry.state : entry.State
   var connected = entry.connected !== undefined && entry.connected !== null ? entry.connected : entry.Connected
   if (id === undefined || id === null || String(id) === "") return null
+  if (!isSafeDeviceId(id)) return null
   return {
     id: String(id),
     name: String(name !== undefined && name !== null ? name : id),
@@ -420,6 +427,7 @@ if (typeof module !== "undefined") {
     parseMprisStatus: parseMprisStatus,
     parseBatteryOutput: parseBatteryOutput,
     parseVersionOutput: parseVersionOutput,
+    isSafeDeviceId: isSafeDeviceId,
     configTomlPath: configTomlPath,
     pairCommand: pairCommand,
     shareCommand: shareCommand,
