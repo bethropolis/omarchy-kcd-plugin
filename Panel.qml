@@ -47,10 +47,11 @@ Panel {
   readonly property bool playing: io.playing
   readonly property string uiState: io.uiState
   readonly property bool pairing: io.pairing
+  readonly property string verificationKey: io.verificationKey
   readonly property bool startingDaemon: io.startingDaemon
 
   // Thin wrappers — functions can't alias.
-  function refresh(forceDevices) { io.refresh(forceDevices) }
+  function refresh() { io.refresh() }
   function togglePairing() { io.togglePairing() }
   function startDaemon() { io.startDaemon() }
   function runTile(tile) { io.runTile(tile) }
@@ -80,13 +81,13 @@ Panel {
     openedFromHotkey = false
     setCenterHoverRevealSuppressed(false)
     root.controller.show()
-    root.refresh(false)
+    root.refresh()
   }
 
   function openFromHotkey() {
     openedFromHotkey = true
     root.controller.show()
-    root.refresh(false)
+    root.refresh()
     Qt.callLater(function() {
       if (root.opened) setCenterHoverRevealSuppressed(true)
     })
@@ -222,6 +223,7 @@ Panel {
             mode: root.uiState === "down" ? "down" : (root.uiState === "offline" ? "offline" : "unpaired")
             deviceName: root.pairedName
             pairing: root.pairing
+            verificationKey: root.verificationKey
             startingDaemon: root.startingDaemon
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily

@@ -65,24 +65,12 @@ describe("normalizeDevice", () => {
   });
 });
 
-describe("parseDevicesOutput / normalizeDevices", () => {
-  it("returns [] on empty or garbage", () => {
-    expect(Kcd.parseDevicesOutput("")).toEqual([]);
-    expect(Kcd.parseDevicesOutput("  ")).toEqual([]);
-    expect(Kcd.parseDevicesOutput("not json")).toEqual([]);
-  });
-
-  it("wraps a single object into a list", () => {
-    const out = Kcd.parseDevicesOutput('{"id":"a","state":"PAIRED"}');
-    expect(out.length).toBe(1);
-    expect(out[0].id).toBe("a");
-  });
-
+describe("normalizeDevices", () => {
   it("drops entries without ids", () => {
-    expect(Kcd.parseDevicesOutput('[{}, {"id":"a"}]').map((d) => d.id)).toEqual(["a"]);
+    expect(Kcd.normalizeDevices([{}, { id: "a" }]).map((d) => d.id)).toEqual(["a"]);
   });
 
-  it("normalizeDevices rejects non-arrays", () => {
+  it("rejects non-arrays", () => {
     expect(Kcd.normalizeDevices(null)).toEqual([]);
     expect(Kcd.normalizeDevices({})).toEqual([]);
   });
@@ -134,24 +122,6 @@ describe("normalizeBattery", () => {
   });
 });
 
-describe("parseBatteryOutput", () => {
-  it("parses the --json object", () => {
-    expect(Kcd.parseBatteryOutput('{"charge":69,"charging":false,"deviceId":"x"}')).toEqual({
-      charge: 69, charging: false,
-    });
-  });
-
-  it("parses the legacy human format", () => {
-    expect(Kcd.parseBatteryOutput("Battery: 43% (charging)")).toEqual({ charge: 43, charging: true });
-    expect(Kcd.parseBatteryOutput("Battery: 43% (discharging)")).toEqual({ charge: 43, charging: false });
-  });
-
-  it("returns null on garbage", () => {
-    expect(Kcd.parseBatteryOutput("")).toBeNull();
-    expect(Kcd.parseBatteryOutput("hello")).toBeNull();
-  });
-});
-
 describe("media helpers", () => {
   const track = (over = {}) => ({
     player: "spotify", title: "Song", artist: "A", album: "B",
@@ -171,13 +141,6 @@ describe("media helpers", () => {
     expect(Kcd.isFreshMedia(track({ isPlaying: false, mediaAgeMs: 5000 }))).toBe(true);
     expect(Kcd.isFreshMedia(track({ isPlaying: false, mediaAgeMs: 60000 }))).toBe(false);
     expect(Kcd.isFreshMedia(null)).toBe(false);
-  });
-
-  it("parseMprisStatus returns the first valid track or null", () => {
-    expect(Kcd.parseMprisStatus("")).toBeNull();
-    expect(Kcd.parseMprisStatus("[]")).toBeNull();
-    expect(Kcd.parseMprisStatus("nope")).toBeNull();
-    expect(Kcd.parseMprisStatus('[{"title":"T"}]').title).toBe("T");
   });
 
   it("isUsableArt only allows loadable urls", () => {
@@ -206,6 +169,24 @@ describe("parseWatchLine", () => {
     expect(Kcd.parseWatchLine('{"type":"battery.update","deviceId":"d","payload":{"charge":80}}')).toEqual({
       event: { type: "battery.update", deviceId: "d", timestamp: "", payload: { charge: 80 } },
     });
+  });
+
+  it("carries the string payload device.added sends", () => {
+    const r = Kcd.parseWatchLine('{"type":"device.added","deviceId":"d","payload":"Pixel 8"}');
+    expect(r.event.type).toBe("device.added");
+    expect(r.event.payload).toBe("Pixel 8");
+  });
+
+  it("carries the pair.requested verification key", () => {
+    const r = Kcd.parseWatchLine('{"type":"pair.requested","deviceId":"d","payload":{"name":"P","type":"phone","verificationKey":"ABCD1234EFGH5678"}}');
+    expect(r.event.payload.verificationKey).toBe("ABCD1234EFGH5678");
+  });
+});
+
+describe("connectivity payload", () => {
+  it("normalizeSignal reads a live connectivity.update payload", () => {
+    const ev = Kcd.parseWatchLine('{"type":"connectivity.update","deviceId":"d","payload":{"signalStrengths":{"wlan0":{"networkType":"Wi-Fi","networkDetailedType":"Wi-Fi","signalStrength":4}}}}');
+    expect(Kcd.normalizeSignal(ev.event.payload).label).toBe("Wi-Fi");
   });
 });
 

@@ -101,22 +101,6 @@ function isFreshMedia(track) {
   return age <= 10000
 }
 
-// Parse `kcd devices --json` stdout into normalized devices.
-// Returns [] on any failure — callers treat empty as "no data yet".
-function parseDevicesOutput(text) {
-  var raw = String(text || "").trim()
-  if (raw === "") return []
-  var parsed = null
-  try {
-    parsed = JSON.parse(raw)
-  } catch (e) {
-    return []
-  }
-  if (parsed === null || parsed === undefined) return []
-  var list = parsed instanceof Array ? parsed : [parsed]
-  return normalizeDevices(list)
-}
-
 // Normalize an already-parsed device array (e.g. state.snapshot payload).
 function normalizeDevices(list) {
   var out = []
@@ -200,25 +184,6 @@ function normalizeTrack(entry) {
 function numOr(value, fallback) {
   var n = Number(value)
   return isFinite(n) && n >= 0 ? n : fallback
-}
-
-// Parse `kcd mpris status --json` stdout. Empty array / garbage → null
-// (panel shows "No media playing" rather than stale data).
-function parseMprisStatus(text) {
-  var raw = String(text || "").trim()
-  if (raw === "" || raw === "null" || raw === "[]") return null
-  var parsed = null
-  try {
-    parsed = JSON.parse(raw)
-  } catch (e) {
-    return null
-  }
-  var list = parsed instanceof Array ? parsed : [parsed]
-  for (var i = 0; i < list.length; i++) {
-    var track = normalizeTrack(list[i])
-    if (track !== null) return track
-  }
-  return null
 }
 
 // Album art is only loadable once the daemon has resolved it to a
@@ -358,26 +323,6 @@ function progress(pos, length) {
   return Math.max(0, Math.min(1, p / l))
 }
 
-// Parse `kcd battery --json <id>` output, e.g.
-// '{"charge":69,"charging":false,"deviceId":"..."}', falling back to the
-// legacy human format "Battery: 43% (charging)" for older binaries.
-// Returns { charge, charging } or null.
-function parseBatteryOutput(text) {
-  var raw = String(text || "").trim()
-  if (raw.charAt(0) === "{") {
-    try {
-      var parsed = JSON.parse(raw)
-      var quick = normalizeBattery(parsed)
-      if (quick) return quick
-    } catch (e) {}
-  }
-  var m = raw.match(/(\d+)\s*%[^()]*\(([^)]+)\)/)
-  if (!m) return null
-  var state = String(m[2] || "")
-  var charging = /charging/i.test(state) && !/discharging/i.test(state)
-  return { charge: parseInt(m[1], 10), charging: charging }
-}
-
 // Sticky single-device framing: keep the previously selected device first
 // while it is still present and usable (paired+connected), so two paired
 // phones don't flap the auto-selection (and reset battery/track) on every
@@ -414,7 +359,6 @@ function parseVersionOutput(text) {
 if (typeof module !== "undefined") {
   module.exports = {
     normalizeDevice: normalizeDevice,
-    parseDevicesOutput: parseDevicesOutput,
     normalizeDevices: normalizeDevices,
     normalizeBattery: normalizeBattery,
     normalizeSignal: normalizeSignal,
@@ -424,8 +368,6 @@ if (typeof module !== "undefined") {
     pickPairedDevice: pickPairedDevice,
     pickAutoDevice: pickAutoDevice,
     normalizeTrack: normalizeTrack,
-    parseMprisStatus: parseMprisStatus,
-    parseBatteryOutput: parseBatteryOutput,
     parseVersionOutput: parseVersionOutput,
     isSafeDeviceId: isSafeDeviceId,
     configTomlPath: configTomlPath,

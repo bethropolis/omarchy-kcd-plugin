@@ -290,14 +290,28 @@ except KeyboardInterrupt:
 | `share.complete` | File transfer finished |
 | `mpris.update` | Now-playing state changed (deduplicated — only on real changes) |
 | `sms.incoming` | SMS/MMS received |
+
+> **SMS freshness:** the phone only pushes new messages after the daemon
+> has asked once, which by default happens only while a client subscribes to
+> `sms.incoming` — so `kcd watch --events sms.incoming` is all it takes to
+> receive messages live. Set `[sms] always_arm = true` to ask on every
+> connect instead and notify with no client attached. The phone cannot be un-asked,
+> so a client that subscribes leaves the phone pushing afterwards; the
+> daemon keeps publishing events in that case but stays quiet on desktop
+> notifications. Messages that predate the ask arrive as a one-off burst of
+> per-thread history and are not notified.
+| `contacts.updated` | Contacts sync progress (counts only; call `contacts_list` for data) |
 | `pair.requested` | Remote device wants to pair |
 | `ping.received` | Ping from device |
 
-> **Freshness:** the daemon re-requests now-playing from devices with an
-> actively-playing player every 5 seconds, so a pure-push client (a widget watching the
-> event stream, with no polling) receives the current track within one poll
-> interval of subscribing — including mid-track mount, thanks to the initial
-> event dump. Events are deduplicated: `mpris.update` only fires when the
+> **Freshness:** while at least one client watches `mpris.update`, the
+> daemon runs a 5-second ticker that re-requests now-playing from devices
+> with an actively-playing player, so a pure-push client (a widget watching
+> the event stream, with no polling) receives the current track within one
+> poll interval of subscribing — including mid-track mount, thanks to the
+> initial event dump. The ticker itself only runs while watched: with
+> nobody watching, there is no timer and no refresh requests go out at all.
+> Events are deduplicated: `mpris.update` only fires when the
 > state actually changed, so the stream stays quiet between track changes.
 > Stopped/paused players are not polled, and when the phone removes a player
 > from its `playerList` (session destroyed) the cached state is dropped with
@@ -311,7 +325,20 @@ except KeyboardInterrupt:
 
 > **Position:** payloads stamp `posAnchorMs` (Unix millis when `pos` was
 > sampled). Live position is `pos + (nowMs - posAnchorMs)` while playing,
-> frozen otherwise — no client-side timers needed.
+> frozen otherwise — no client-side timers needed. Local (desktop-player)
+> broadcasts carry the anchor too, stamped at send time.
+>
+> **Local idle behavior:** the D-Bus watcher is event-driven, but while a
+> local player is playing the daemon re-reads its state every
+> `position_interval` (default `"2s"`, `[mpris]` section). Steady playback
+> stays silent — the phone extrapolates from `posAnchorMs` — and a tick
+> re-broadcasts only on a metadata change or when the true position drifts
+> more than 3s off the extrapolation (seek, missed signal, clock drift).
+> A paused or absent player costs zero wakeups: D-Bus signals arm the poller
+> on playback and it stops itself on a confirmed pause, so there is no
+> background timer once nothing is playing. Set
+> `poll_while_playing = false` for pure event-driven mode (position then
+> extrapolates from `posAnchorMs` between D-Bus signals).
 
 See [`IPC_PROTOCOL.md §5`](IPC_PROTOCOL.md#5-event-types) for the full list.
 
@@ -370,6 +397,22 @@ ipc_request(sock, "send_sms", {
 ```python
 ipc_request(sock, "findmyphone", {"deviceId": dev_id})
 # or: ipc_request(sock, "ring", {"deviceId": dev_id})
+```
+
+### 5.7 Sync Contacts
+
+```python
+ipc_request(sock, "contacts_sync", {"deviceId": dev_id})
+# progress arrives as contacts.updated events (counts only)
+
+resp = ipc_request(sock, "contacts_list", {"deviceId": dev_id})
+if resp["ok"]:
+    for c in resp["data"]:
+        print(c["name"], c.get("phones", []))
+# empty list = never synced (unknown, not zero contacts)
+
+# delete the cached address book (offline-capable; re-sync restores it)
+ipc_request(sock, "contacts_clear", {"deviceId": dev_id})
 ```
 
 ### 5.7 Lock/Unlock
@@ -457,6 +500,8 @@ Each event type carries a different payload shape. Here are the common ones:
 
 - `requestReplyId` is present only for notifications that support inline
   replies. Use it with the `notify_reply` command.
+- `id` identifies the notification for `notify_dismiss`, which clears it
+  on the phone and closes the desktop popup.
 
 ### Share Progress
 
@@ -559,6 +604,12 @@ def reply_to_notification(dev_id, notif_id, message):
         "deviceId": dev_id,
         "replyId": notif_id,
         "message": message
+    })
+
+def dismiss_notification(dev_id, notif_id):
+    ipc_request(command_sock, "notify_dismiss", {
+        "deviceId": dev_id,
+        "notificationId": notif_id
     })
 ```
 
@@ -726,6 +777,12 @@ Usage: `python3 monitor.py '["battery.update","mpris.update"]'`
 
 ### 9.3 GTK4/Shell Proxy
 
+The plain-text output of `kcd watch` is formatted for people, not for parsing:
+long values are truncated, zero counts are dropped, and the wording is prose
+("incoming call", "battery low"). It is not a stable interface. Anything that
+needs the full payload should use `--json`, whose event stream is the
+documented contract in [`IPC_PROTOCOL.md §5`](IPC_PROTOCOL.md#5-event-types).
+
 For desktop shell widgets (eww, ags, quickshell), run `kcd watch` in the
 background and pipe the JSON output to a named pipe or parse it directly:
 
@@ -735,6 +792,14 @@ kcd watch --json '["battery.update","mpris.update"]' | while read -r line; do
     [ "$line" = '{"ok":true}' ] && continue
     # Parse and update widget state
 done
+```
+
+To read events by eye instead:
+
+```bash
+kcd watch                     # everything, rendered for a terminal
+kcd watch --events=sms.incoming
+kcd watch --events=connectivity.update
 ```
 
 ---
