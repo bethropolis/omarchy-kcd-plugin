@@ -210,6 +210,13 @@ describe("command builders", () => {
     expect(Kcd.pairCommand()).toEqual(["kcd", "pair", "-y"]);
   });
 
+  it("unpairCommand builds argv and guards the device id", () => {
+    expect(Kcd.unpairCommand("9a5c23ea_7195_4da1")).toEqual(["kcd", "unpair", "9a5c23ea_7195_4da1"]);
+    expect(Kcd.unpairCommand("")).toBeNull();
+    expect(Kcd.unpairCommand(null)).toBeNull();
+    expect(Kcd.unpairCommand("x'; rm -rf ~; echo '")).toBeNull();
+  });
+
   it("shareCommand and screenshotShareCommand reject blanks", () => {
     expect(Kcd.shareCommand("d", "/f")).toEqual(["kcd", "share", "d", "/f"]);
     expect(Kcd.shareCommand("", "/f")).toBeNull();

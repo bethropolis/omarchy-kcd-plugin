@@ -77,6 +77,24 @@ Panel {
   readonly property color contentDim: Qt.darker(contentForeground, 1.5)
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
+  // Unpair is a long-press on the header plus a confirm step, so the
+  // dashboard carries no affordance for it.
+  property bool unpairConfirmOpen: false
+
+  function requestUnpair() {
+    if (root.deviceId === "") return
+    root.unpairConfirmOpen = true
+  }
+
+  function confirmUnpair() {
+    root.unpairConfirmOpen = false
+    io.unpairDevice()
+  }
+
+  function cancelUnpair() {
+    root.unpairConfirmOpen = false
+  }
+
   function open() {
     openedFromHotkey = false
     setCenterHoverRevealSuppressed(false)
@@ -146,7 +164,9 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      onCloseRequested: root.close()
+      // While the confirm is up it owns the keys, so Escape cancels the
+      // dialog instead of closing the panel behind it.
+      onCloseRequested: root.unpairConfirmOpen ? root.cancelUnpair() : root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
       Flickable {
@@ -177,6 +197,7 @@ Panel {
             lastSeenText: root.lastSeenText
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
+            onUnpairRequested: root.requestUnpair()
           }
 
 
@@ -294,6 +315,26 @@ Panel {
             }
           }
         }
+      }
+
+      // Unpair confirm. Cancel stays the default selection, so Enter on an
+      // untouched dialog is the safe outcome.
+      ConfirmDialog {
+        id: unpairConfirm
+        anchors.fill: parent
+        z: 10
+        opened: root.unpairConfirmOpen
+        message: "Unpair " + root.deviceName + "? You'll have to accept the pairing on the phone again."
+        cancelText: "Cancel"
+        confirmText: "Unpair"
+        background: root.bar ? root.bar.background : Color.background
+        foreground: root.contentForeground
+        selectedBackground: Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
+        selectedText: Color.accent
+        fontFamily: root.contentFontFamily
+        cornerRadius: Style.cornerRadius
+        onCanceled: root.cancelUnpair()
+        onConfirmed: root.confirmUnpair()
       }
     }
   }

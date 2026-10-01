@@ -400,6 +400,15 @@ QtObject {
     Quickshell.execDetached(cmd)
   }
 
+  // Revoke trust for the selected phone. No local state change: the
+  // daemon publishes device.removed and applyEvent drops the device, so
+  // the panel reaches the unpaired state on its own.
+  function unpairDevice() {
+    var cmd = Kcd.unpairCommand(io.deviceId)
+    if (!cmd) return
+    Quickshell.execDetached(cmd)
+  }
+
   // shareFile() here is only the process-spawn half: Panel.qml owns the
   // deviceId guard and closes the panel first (the portal chooser takes
   // over from there). Invoked through bash so a lost exec bit on deploy

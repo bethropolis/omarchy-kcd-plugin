@@ -259,6 +259,15 @@ function pairCommand() {
   return ["kcd", "pair", "-y"]
 }
 
+// `kcd unpair <id>`: sends a rejection packet and drops the device from
+// the registry. No local state change is needed — the daemon publishes
+// device.removed and the panel follows the event.
+function unpairCommand(deviceId) {
+  var id = String(deviceId || "")
+  if (!isSafeDeviceId(id)) return null
+  return ["kcd", "unpair", id]
+}
+
 // `kcd share <id> <path>`: single file only, directories rejected by the
 // CLI. The argv contract kcd-share.sh fulfills (it invokes kcd directly);
 // spelled out here next to every other command builder.
@@ -372,6 +381,7 @@ if (typeof module !== "undefined") {
     isSafeDeviceId: isSafeDeviceId,
     configTomlPath: configTomlPath,
     pairCommand: pairCommand,
+    unpairCommand: unpairCommand,
     shareCommand: shareCommand,
     screenshotShareCommand: screenshotShareCommand,
     stickDevice: stickDevice,

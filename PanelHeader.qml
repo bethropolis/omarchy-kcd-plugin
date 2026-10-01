@@ -4,14 +4,18 @@ import qs.Ui
 import "Kcd.js" as Kcd
 
 // Device header (Step 2 of the Panel split): phone name, connection dot,
-// battery readout, wifi glyph + tooltip, last-seen line. Pure read-only
-// inputs — no signals; the wifi hover state is self-contained.
+// battery readout, wifi glyph + tooltip, last-seen line. Read-only inputs
+// except the long-press that requests an unpair (a gesture, so it adds no
+// visible affordance to the layout); the wifi hover state is self-contained.
 // Glyph codepoints are authoritative here — see Panel.qml history,
 // not REVIEW.md (whose snippets had them stripped).
 Item {
   id: header
   width: parent.width
   height: Math.max(headerLeft.height, headerRight.height)
+
+  // Long-pressing the device cluster asks to unpair; Panel.qml confirms.
+  signal unpairRequested()
 
   property string deviceName: "No phone"
   property bool liveConnected: false
@@ -26,55 +30,78 @@ Item {
   // Connection state follows the theme accent, like the media seeker.
   property color accent: Color.accent
 
-  Row {
-    id: headerLeft
+  Item {
+    id: headerLeftWrap
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
-    spacing: Style.space(12)
+    width: headerLeft.width
+    height: headerLeft.height
 
-    Text {
-      anchors.verticalCenter: parent.verticalCenter
-      textFormat: Text.PlainText
-      text: "󰄜"
-      color: header.foreground
-      font.family: header.fontFamily
-      font.pixelSize: Style.font.title + 14
+    MouseArea {
+      id: unpairMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      acceptedButtons: Qt.LeftButton
+      cursorShape: containsMouse ? Qt.PointingHandCursor : Qt.ArrowCursor
+      // A plain click must not fire: only the hold means unpair.
+      onClicked: function(mouse) { mouse.accepted = false }
+      onPressAndHold: header.unpairRequested()
     }
 
-    Column {
-      anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.space(2)
+    PanelToolTip {
+      visible: unpairMouse.containsMouse
+      text: "Hold to unpair"
+      fontFamily: header.fontFamily
+    }
+
+    Row {
+      id: headerLeft
+      spacing: Style.space(12)
 
       Text {
+        anchors.verticalCenter: parent.verticalCenter
         textFormat: Text.PlainText
-        text: header.deviceName
+        text: "󰄜"
         color: header.foreground
         font.family: header.fontFamily
-        font.pixelSize: Style.font.title
-        font.bold: true
-        elide: Text.ElideRight
-        width: Math.min(implicitWidth, Style.space(160))
+        font.pixelSize: Style.font.title + 14
       }
 
-      Row {
-        spacing: Style.space(6)
-
-        Rectangle {
-          anchors.verticalCenter: parent.verticalCenter
-          width: Style.space(7)
-          height: Style.space(7)
-          radius: width / 2
-          color: header.liveConnected ? header.accent : Qt.darker(header.foreground, 2.0)
-        }
+      Column {
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(2)
 
         Text {
           textFormat: Text.PlainText
-          anchors.verticalCenter: parent.verticalCenter
-          text: header.liveConnected ? "Connected" : "Offline"
-          color: header.liveConnected ? header.accent : header.dim
+          text: header.deviceName
+          color: header.foreground
           font.family: header.fontFamily
-          font.pixelSize: Style.font.caption
+          font.pixelSize: Style.font.title
           font.bold: true
+          elide: Text.ElideRight
+          width: Math.min(implicitWidth, Style.space(160))
+        }
+
+        Row {
+          spacing: Style.space(6)
+
+          Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: Style.space(7)
+            height: Style.space(7)
+            radius: width / 2
+            color: header.liveConnected ? header.accent : Qt.darker(header.foreground, 2.0)
+          }
+
+          Text {
+            textFormat: Text.PlainText
+            anchors.verticalCenter: parent.verticalCenter
+            text: header.liveConnected ? "Connected" : "Offline"
+            color: header.liveConnected ? header.accent : header.dim
+            font.family: header.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
         }
       }
     }
