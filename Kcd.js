@@ -9,9 +9,11 @@
 // Normalize everything to { id, name, type, state, connected } here.
 
 // Device IDs are daemon-supplied and untrusted: never let one reach a
-// shell. Real IDs are UUID-shaped hex with underscores.
+// shell. Real IDs are UUID-shaped hex with underscores. The dash is
+// escaped so the class is not read as a `.`-to-`:` range (which would
+// quietly admit "/" and "@").
 function isSafeDeviceId(id) {
-  return /^[A-Za-z0-9_.:-]+$/.test(String(id || ""))
+  return /^[A-Za-z0-9_.:\-]+$/.test(String(id || ""))
 }
 
 // Normalize one device entry from either wire shape.
@@ -271,6 +273,39 @@ function unpairCommand(deviceId) {
   return ["kcd", "unpair", id]
 }
 
+// `kcd sftp unmount <id>`: fusermount plus cleanup of the temp mount
+// point. The daemon tracks the sshfs PID, so let it do the unmount rather
+// than calling fusermount ourselves.
+function unmountCommand(deviceId) {
+  var id = String(deviceId || "")
+  if (!isSafeDeviceId(id)) return null
+  return ["kcd", "sftp", "unmount", id]
+}
+
+// Is the phone's storage currently mounted? Read from the kernel mount
+// table (/proc/mounts): the daemon publishes no mount-state event, and
+// `sftp info` carries no such field.
+//
+// Matching is a suffix test on the mountpoint, which kcd always ends with
+// "/kcd-sftp-<device id>", so this works whatever `[sftp] mount_dir` says
+// in the user's kcd.toml. A suffix (not a substring) match keeps
+// "kcd-sftp-<id>-extra" from counting. Only fuse.sshfs counts, so a dead
+// leftover mountpoint directory is never mistaken for a live mount.
+function isSftpMounted(mountsText, deviceId) {
+  var id = String(deviceId || "")
+  if (!isSafeDeviceId(id)) return false
+  var suffix = "/kcd-sftp-" + id
+  var lines = String(mountsText || "").split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var fields = lines[i].trim().split(/\s+/)
+    // <device> <mountpoint> <fstype> ...
+    if (fields.length < 3) continue
+    if (fields[1].slice(-suffix.length) !== suffix) continue
+    if (fields[2] === "fuse.sshfs") return true
+  }
+  return false
+}
+
 // `kcd share <id> <path>`: single file only, directories rejected by the
 // CLI. The argv contract kcd-share.sh fulfills (it invokes kcd directly);
 // spelled out here next to every other command builder.
@@ -385,6 +420,8 @@ if (typeof module !== "undefined") {
     configTomlPath: configTomlPath,
     pairCommand: pairCommand,
     unpairCommand: unpairCommand,
+    unmountCommand: unmountCommand,
+    isSftpMounted: isSftpMounted,
     shareCommand: shareCommand,
     screenshotShareCommand: screenshotShareCommand,
     stickDevice: stickDevice,

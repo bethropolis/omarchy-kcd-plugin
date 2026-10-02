@@ -52,6 +52,9 @@ describe("normalizeDevice", () => {
     expect(Kcd.isSafeDeviceId("$(id)")).toBe(false);
     expect(Kcd.isSafeDeviceId("`id`")).toBe(false);
     expect(Kcd.isSafeDeviceId("a b")).toBe(false);
+    // A "." to ":" character range would quietly admit these.
+    expect(Kcd.isSafeDeviceId("a/b")).toBe(false);
+    expect(Kcd.isSafeDeviceId("a@b")).toBe(false);
     expect(Kcd.isSafeDeviceId("")).toBe(false);
     expect(Kcd.isSafeDeviceId(null)).toBe(false);
   });
@@ -220,6 +223,38 @@ describe("command builders", () => {
     expect(Kcd.unpairCommand("")).toBeNull();
     expect(Kcd.unpairCommand(null)).toBeNull();
     expect(Kcd.unpairCommand("x'; rm -rf ~; echo '")).toBeNull();
+  });
+
+  it("unmountCommand builds argv and guards the device id", () => {
+    expect(Kcd.unmountCommand("9a5c23ea_7195_4da1")).toEqual(["kcd", "sftp", "unmount", "9a5c23ea_7195_4da1"]);
+    expect(Kcd.unmountCommand("")).toBeNull();
+    expect(Kcd.unmountCommand("x'; id; echo '")).toBeNull();
+  });
+
+  it("isSftpMounted reads the kernel mount table", () => {
+    // Verbatim shape of a real /proc/mounts line for a live sshfs mount.
+    const mounted = [
+      "/dev/sda2 /home/bet ext4 rw,relatime 0 0",
+      "kdeconnect@192.168.1.134:/storage/emulated/0 /home/bet/Downloads/kcd/mnt/kcd-sftp-9a5c23ea_7195_4da1_b766_282b7256a02d fuse.sshfs rw,nosuid,nodev,relatime,user_id=1000,group_id=1000 0 0",
+    ].join("\n");
+    expect(Kcd.isSftpMounted(mounted, "9a5c23ea_7195_4da1_b766_282b7256a02d")).toBe(true);
+    // A custom [sftp] mount_dir must not matter: only the suffix does.
+    expect(Kcd.isSftpMounted(
+      "x /var/tmp/whatever/kcd-sftp-dev1 fuse.sshfs rw 0 0", "dev1")).toBe(true);
+
+    // Same directory, no mount: a leftover mountpoint dir is not a mount.
+    const leftover = "/dev/sda2 /home/bet ext4 rw,relatime 0 0\n";
+    expect(Kcd.isSftpMounted(leftover, "9a5c23ea_7195_4da1_b766_282b7256a02d")).toBe(false);
+
+    // A different phone's mount must not register.
+    expect(Kcd.isSftpMounted(mounted, "448f0fb4_fcdc_48c6_86e3_9840d63a7ba0")).toBe(false);
+    // Another filesystem type on the same path is not an sshfs mount.
+    expect(Kcd.isSftpMounted("x /mnt/kcd-sftp-abc tmpfs rw 0 0", "abc")).toBe(false);
+    // A longer id that merely starts with ours is not our mount.
+    expect(Kcd.isSftpMounted("x /mnt/kcd-sftp-abc-extra fuse.sshfs rw 0 0", "abc")).toBe(false);
+    expect(Kcd.isSftpMounted("", "abc")).toBe(false);
+    expect(Kcd.isSftpMounted(null, null)).toBe(false);
+    expect(Kcd.isSftpMounted(mounted, "x'; id; echo '")).toBe(false);
   });
 
   it("shareCommand and screenshotShareCommand reject blanks", () => {

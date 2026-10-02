@@ -223,6 +223,7 @@ Panel {
             width: parent.width
             visible: root.uiState === "ready"
             liveConnected: root.liveConnected
+            storageMounted: io.sftpMounted
             deviceName: root.deviceName
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily

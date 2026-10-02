@@ -14,6 +14,9 @@ Column {
   spacing: Style.space(12)
 
   property bool liveConnected: false
+  // True when the phone's storage is mounted: the Files tile becomes an
+  // Unmount tile, so the mount point never lingers unnoticed.
+  property bool storageMounted: false
   property string deviceName: "phone"
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
@@ -93,9 +96,11 @@ Column {
 
     QuickTile {
       width: parent.cellWidth
-      iconText: ""
-      label: "Files"
-      tooltipText: "Mount the phone's storage and open it"
+      iconText: actions.storageMounted ? "" : ""
+      label: actions.storageMounted ? "Unmount" : "Files"
+      tooltipText: actions.storageMounted
+        ? "Unmount the phone's storage"
+        : "Mount the phone's storage and open it"
       foreground: actions.foreground
       fontFamily: actions.fontFamily
       enabled: actions.liveConnected

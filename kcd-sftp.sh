@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 
-# io.github.bethropolis.kcd: mount a paired phone's storage over SFTP and
-# hand it to the file manager.
-# Usage: kcd-sftp.sh <device-id>
+# io.github.bethropolis.kcd: mount or unmount a paired phone's storage over
+# SFTP. Usage: kcd-sftp.sh <mount|unmount> <device-id>
 #
-# kcd does the whole job (credential wait, sshfs mount, xdg-open), so this
-# script only turns its failure into something the user can act on. The
-# panel spawns it detached, which means an unhandled error would vanish:
+# The panel spawns this detached, so an unhandled error would vanish. kcd
+# does the real work for a mount (credential wait, sshfs, file-manager
+# hand-off); this script's job is to turn a failure into something the user
+# can act on.
 #
-#   mounted                -> silent, the file manager opened
-#   fuse not permitted     -> critical note with the /etc/fuse.conf fix
-#   sshfs missing          -> critical note with the install command
-#   already mounted/stale  -> critical note with the unmount command
-#   anything else          -> critical note with kcd's own output
+#   mount succeeded      -> silent, the file manager opened
+#   fuse not permitted   -> critical note with the /etc/fuse.conf fix
+#   sshfs missing        -> critical note with the install command
+#   already mounted      -> critical note with the unmount command
+#   unmount never made   -> critical note saying nothing was mounted
+#   anything else        -> critical note with kcd's own output
 #
 # Nothing here escalates privileges: fixes are printed for the user to run,
 # never executed. The device id arrives as an argument and is only ever
@@ -20,15 +21,34 @@
 
 set -u
 
-if (($# < 1)); then
-  echo "Usage: kcd-sftp.sh <device-id>" >&2
+if (($# < 2)); then
+  echo "Usage: kcd-sftp.sh <mount|unmount> <device-id>" >&2
   exit 1
 fi
 
-device_id="$1"
+mode="$1"
+device_id="$2"
 
-# Folder glyph, matching the tile that triggers this.
-MOUNT_GLYPH=$'\U000F07B'
+case $mode in
+  mount | unmount) ;;
+  *)
+    echo "Usage: kcd-sftp.sh <mount|unmount> <device-id>" >&2
+    exit 1
+    ;;
+esac
+
+# Folder glyph, matching the tile that triggers a mount; the tile shows an
+# eject glyph when unmounting, so the two modes read as a pair.
+GLYPH=$'\U000F07B'
+
+if [[ $mode == unmount ]]; then
+  if error=$(kcd sftp unmount "$device_id" 2>&1); then
+    exit 0
+  fi
+  omarchy-notification-send -g "$GLYPH" -u critical "Could not unmount phone storage" \
+    "${error:-kcd sftp unmount failed}"
+  exit 1
+fi
 
 output=$(kcd sftp mount "$device_id" 2>&1)
 status=$?
@@ -50,5 +70,5 @@ else
   hint="${output:-kcd sftp mount failed}"
 fi
 
-omarchy-notification-send -g "$MOUNT_GLYPH" -u critical "Could not mount phone storage" "$hint"
+omarchy-notification-send -g "$GLYPH" -u critical "Could not mount phone storage" "$hint"
 exit "$status"

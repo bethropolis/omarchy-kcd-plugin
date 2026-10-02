@@ -55,8 +55,13 @@ QtObject {
   // once instead of backing off; cleared on use.
   property bool watchRestartRequested: false
   property int watchBackoffMs: 2000
-  // Timestamp of the last storage-mount request; guards repeat taps.
+  // Timestamp of the last storage mount/unmount request; guards repeat taps.
   property double mountRequestMs: 0
+  // While in the future, the mount table is re-read every second (a mount
+  // can take ~20s to get credentials). Zero at steady state.
+  property double mountWatchUntilMs: 0
+  // True while the phone's storage is mounted (read from /proc/mounts).
+  readonly property bool sftpMounted: Kcd.isSftpMounted(io.mountsFile.text(), io.deviceId)
   property double ioStartMs: 0
   // Pairing listen mode (`kcd pair -y`): true while pairProc runs.
   // Auto-accepts the first incoming request then exits on its own.
@@ -115,6 +120,9 @@ QtObject {
   // refresh re-checks the binary and bounces the stream for a fresh
   // snapshot instead of re-reading state through the CLI.
   function refresh() {
+    // Mount state is not event-driven upstream, so an open is one of the
+    // few moments worth re-reading the mount table.
+    io.watchMountState(0)
     // Re-runs on every refresh (not latched): a stale installOk would
     // blind reopen to a removed binary. While the probe runs the flags
     // hold, so there is no flash; on exit they carry current truth.
@@ -347,6 +355,9 @@ QtObject {
   // round-trip.
   function handleDeviceDisconnected(id, timestamp) {
     if (!id) return
+    // The daemon tears the SFTP mount down on disconnect, so the mount
+    // table is stale the moment this lands.
+    if (id === io.deviceId) io.watchMountState(0)
     var updated = []
     var found = false
     for (var i = 0; i < io.devices.length; i++) {
@@ -397,7 +408,7 @@ QtObject {
 
   function runTile(tile) {
     if (tile === "files") {
-      io.mountStorage()
+      io.toggleStorage()
       return
     }
     var cmd = Kcd.tileCommand(tile, io.deviceId)
@@ -406,13 +417,32 @@ QtObject {
     Quickshell.execDetached(cmd)
   }
 
-  // Mount the phone's storage. Guarded against repeat taps because a
-  // second mount onto a live mountpoint fails (kcd >= 1.19 handles that
-  // itself; the cooldown keeps released daemons from error-spamming).
-  function mountStorage() {
+  // The Files tile toggles: mount when nothing is mounted, unmount when
+  // the phone's storage is live. Rate-limited because a second mount onto
+  // a live mountpoint fails (kcd >= 1.19 guards that itself; the cooldown
+  // keeps released daemons from error-spamming).
+  function toggleStorage() {
     if (io.deviceId === "" || Date.now() - io.mountRequestMs < 10000) return
     io.mountRequestMs = Date.now()
-    Quickshell.execDetached(["bash", io.pluginDir + "/kcd-sftp.sh", io.deviceId])
+    io.watchMountState(25000)
+    var mode = io.sftpMounted ? "unmount" : "mount"
+    Quickshell.execDetached(["bash", io.pluginDir + "/kcd-sftp.sh", mode, io.deviceId])
+  }
+
+  // kcd publishes no mount-state event, so the mount table is the source of
+  // truth. Re-read it on demand: when a mount/unmount is in flight (the
+  // credential wait alone can take 20s), on connect/disconnect (the daemon
+  // auto-unmounts then), and whenever the panel opens. /proc files send no
+  // change notification, hence the explicit reload.
+  function watchMountState(durationMs) {
+    io.mountWatchUntilMs = Date.now() + (durationMs || 0)
+    io.mountsFile.reload()
+  }
+
+  property FileView mountsFile: FileView {
+    path: "/proc/mounts"
+    // Read on construction and after every reload; never block.
+    printErrors: false
   }
 
   // Revoke trust for the selected phone. No local state change: the
@@ -533,6 +563,16 @@ QtObject {
         io.installOk = false
       }
     }
+  }
+
+  // Mount-state settle timer. /proc sends no change notifications, so a
+  // mount in flight is watched by re-reading the table. The `running`
+  // binding stops it once the window closes, so steady state is silent.
+  property Timer mountWatchTimer: Timer {
+    interval: 1000
+    repeat: true
+    running: io.mountWatchUntilMs > Date.now()
+    onTriggered: io.mountsFile.reload()
   }
 
   // Panel-open and retry-tap refreshes, intake top-ups, and the watch
