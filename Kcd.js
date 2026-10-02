@@ -236,11 +236,14 @@ function watchCommand(events) {
   return cmd
 }
 
+// Quick-action tiles. "files" mounts the phone's storage: kcd does the
+// credential wait, the sshfs mount and the file-manager hand-off, so the
+// tile only spawns it (through kcd-sftp.sh, which reports failures).
 function tileCommand(tile, deviceId) {
   var id = String(deviceId || "")
-  if (tile === "ping") return ["kcd", "ping", id]
   if (tile === "ring") return ["kcd", "findmyphone", id]
   if (tile === "clipboard") return id !== "" ? ["kcd", "clipboard", id] : ["kcd", "clipboard"]
+  if (tile === "files") return ["kcd", "sftp", "mount", id]
   return null
 }
 

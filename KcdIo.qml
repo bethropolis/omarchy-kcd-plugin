@@ -55,6 +55,8 @@ QtObject {
   // once instead of backing off; cleared on use.
   property bool watchRestartRequested: false
   property int watchBackoffMs: 2000
+  // Timestamp of the last storage-mount request; guards repeat taps.
+  property double mountRequestMs: 0
   property double ioStartMs: 0
   // Pairing listen mode (`kcd pair -y`): true while pairProc runs.
   // Auto-accepts the first incoming request then exits on its own.
@@ -394,10 +396,23 @@ QtObject {
   }
 
   function runTile(tile) {
+    if (tile === "files") {
+      io.mountStorage()
+      return
+    }
     var cmd = Kcd.tileCommand(tile, io.deviceId)
     if (!cmd) return
-    if ((tile === "ping" || tile === "ring") && io.deviceId === "") return
+    if (tile === "ring" && io.deviceId === "") return
     Quickshell.execDetached(cmd)
+  }
+
+  // Mount the phone's storage. Guarded against repeat taps because a
+  // second mount onto a live mountpoint fails (kcd >= 1.19 handles that
+  // itself; the cooldown keeps released daemons from error-spamming).
+  function mountStorage() {
+    if (io.deviceId === "" || Date.now() - io.mountRequestMs < 10000) return
+    io.mountRequestMs = Date.now()
+    Quickshell.execDetached(["bash", io.pluginDir + "/kcd-sftp.sh", io.deviceId])
   }
 
   // Revoke trust for the selected phone. No local state change: the

@@ -192,11 +192,16 @@ describe("connectivity payload", () => {
 
 describe("command builders", () => {
   it("tileCommand maps tiles and guards ping/ring", () => {
-    expect(Kcd.tileCommand("ping", "d")).toEqual(["kcd", "ping", "d"]);
     expect(Kcd.tileCommand("ring", "d")).toEqual(["kcd", "findmyphone", "d"]);
     expect(Kcd.tileCommand("clipboard", "d")).toEqual(["kcd", "clipboard", "d"]);
     expect(Kcd.tileCommand("clipboard", "")).toEqual(["kcd", "clipboard"]);
     expect(Kcd.tileCommand("nope", "d")).toBeNull();
+  });
+
+  it("tileCommand builds the storage mount", () => {
+    expect(Kcd.tileCommand("files", "d")).toEqual(["kcd", "sftp", "mount", "d"]);
+    // Ping was removed; the name must no longer resolve.
+    expect(Kcd.tileCommand("ping", "d")).toBeNull();
   });
 
   it("watchCommand joins event filters", () => {

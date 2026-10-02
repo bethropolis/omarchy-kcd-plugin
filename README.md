@@ -24,6 +24,7 @@ transport controls, and single-press quick actions.
 
 * Omarchy Quattro (`omarchy-shell`)
 * `kcd` daemon >= 1.18.0 with a paired phone
+* `sshfs`, only for the **Files** quick action
 
 ## Install
 
@@ -69,8 +70,11 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
 * Media card: album art, title/artist, prev / play-pause / next, wave
   seeker with smooth playhead.
 
-* Quick actions: **Ping**, **Ring**, **Clipboard**, **Share**,
-  **Screenshot** (live). Share
+* Quick actions: **Files**, **Ring**, **Clipboard**, **Share**,
+  **Screenshot** (live). Files mounts the phone's storage over SFTP
+  (`sshfs`) and opens it in your file manager; it needs `sshfs` and a phone
+  that granted storage permission, and reports failures as a desktop
+  notification. Share
   picks one file with the native chooser (`omarchy-file-select`) and sends
   it via `kcd share`, reporting back as a desktop notification.
   Screenshot captures the focused monitor with `grim` (after the panel
@@ -114,6 +118,7 @@ bun test tests/
 | `KcdMissing.qml` / `KcdUnpaired.qml` | Empty-state panels |
 | `Kcd.js` | Device/track/event parsing + CLI argv builders |
 | `kcd-share.sh` | Share flow: native pick → `kcd share` → notification |
+| `kcd-sftp.sh` | Files flow: `kcd sftp mount` → classified failure notification |
 | `kcd-screenshot-share.sh` | Screenshot flow: `grim` → `/tmp` stage → `kcd share` → delete on `share.complete` |
 | `tests/kcd.test.js` | Bun suite for the `Kcd.js` helpers (`bun test tests/`) |
 
