@@ -17,6 +17,8 @@ Column {
   property string fontFamily: Style.font.family
   // True while `kcd pair -y` listen mode runs (owned by the panel).
   property bool pairing: false
+  // Key from the last pair.requested, so the phone's code can be compared.
+  property string verificationKey: ""
   // True while `systemctl --user start kcd` runs (owned by the panel).
   property bool startingDaemon: false
 
@@ -65,6 +67,18 @@ Column {
         : root.pairing
           ? "Listening for pair requests… accept the prompt on your phone and it connects on its own. Tap Pairing to cancel."
           : "No phone is paired yet. Tap Start pairing, then accept the request on your phone — it connects on its own."
+    color: Qt.darker(root.foreground, 1.4)
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.bodySmall
+  }
+
+  // Shown only when a request actually arrived: compare with the phone.
+  Text {
+    visible: root.verificationKey !== ""
+    textFormat: Text.PlainText
+    width: parent.width
+    horizontalAlignment: Text.AlignHCenter
+    text: "Verification key\n" + root.verificationKey
     color: Qt.darker(root.foreground, 1.4)
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall

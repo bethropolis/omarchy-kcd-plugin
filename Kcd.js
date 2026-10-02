@@ -9,9 +9,11 @@
 // Normalize everything to { id, name, type, state, connected } here.
 
 // Device IDs are daemon-supplied and untrusted: never let one reach a
-// shell. Real IDs are UUID-shaped hex with underscores.
+// shell. Real IDs are UUID-shaped hex with underscores. The dash is
+// escaped so the class is not read as a `.`-to-`:` range (which would
+// quietly admit "/" and "@").
 function isSafeDeviceId(id) {
-  return /^[A-Za-z0-9_.:-]+$/.test(String(id || ""))
+  return /^[A-Za-z0-9_.:\-]+$/.test(String(id || ""))
 }
 
 // Normalize one device entry from either wire shape.
@@ -38,8 +40,19 @@ function normalizeDevice(entry) {
     lastSeen: String(entry.last_seen !== undefined && entry.last_seen !== null ? entry.last_seen : (entry.lastSeen !== undefined && entry.lastSeen !== null ? entry.lastSeen : (entry.LastSeen || ""))),
     // signal is the daemon's connectivity report ({ signalStrengths: {...} })
     // reduced to a display label, or null when unreported.
-    signal: normalizeSignal(entry.signal !== undefined ? entry.signal : entry.Signal)
+    signal: normalizeSignal(entry.signal !== undefined ? entry.signal : entry.Signal),
+    // SFTP mount state, from the daemon's sftp.mounted / sftp.unmounted
+    // events and the `sftp` block on the summary. The daemon omits the
+    // block entirely when nothing is mounted, so absent means false.
+    storageMounted: isStorageMounted(entry.sftp !== undefined ? entry.sftp : entry.Sftp)
   }
+}
+
+// The `sftp` summary block is { mounted: true, mountPoint: "..." } and is
+// omitted unless a mount is live. Anything else means "not mounted".
+function isStorageMounted(sftp) {
+  if (!sftp || typeof sftp !== "object") return false
+  return sftp.mounted === true
 }
 
 // Normalize an embedded { charge, charging } battery summary (or the
@@ -99,22 +112,6 @@ function isFreshMedia(track) {
   var age = Number(track.mediaAgeMs)
   if (!isFinite(age) || age < 0) return true
   return age <= 10000
-}
-
-// Parse `kcd devices --json` stdout into normalized devices.
-// Returns [] on any failure — callers treat empty as "no data yet".
-function parseDevicesOutput(text) {
-  var raw = String(text || "").trim()
-  if (raw === "") return []
-  var parsed = null
-  try {
-    parsed = JSON.parse(raw)
-  } catch (e) {
-    return []
-  }
-  if (parsed === null || parsed === undefined) return []
-  var list = parsed instanceof Array ? parsed : [parsed]
-  return normalizeDevices(list)
 }
 
 // Normalize an already-parsed device array (e.g. state.snapshot payload).
@@ -202,25 +199,6 @@ function numOr(value, fallback) {
   return isFinite(n) && n >= 0 ? n : fallback
 }
 
-// Parse `kcd mpris status --json` stdout. Empty array / garbage → null
-// (panel shows "No media playing" rather than stale data).
-function parseMprisStatus(text) {
-  var raw = String(text || "").trim()
-  if (raw === "" || raw === "null" || raw === "[]") return null
-  var parsed = null
-  try {
-    parsed = JSON.parse(raw)
-  } catch (e) {
-    return null
-  }
-  var list = parsed instanceof Array ? parsed : [parsed]
-  for (var i = 0; i < list.length; i++) {
-    var track = normalizeTrack(list[i])
-    if (track !== null) return track
-  }
-  return null
-}
-
 // Album art is only loadable once the daemon has resolved it to a
 // file:// or http(s):// URL. A raw `kdeconnect:/artUri?...` URI (fetch
 // still in flight or failed) must render a placeholder instead.
@@ -271,9 +249,11 @@ function watchCommand(events) {
   return cmd
 }
 
+// Quick-action tiles that spawn kcd directly. The Files tile is not here:
+// it needs kcd-sftp.sh to classify failures, so it goes through
+// toggleStorage() instead of execDetached.
 function tileCommand(tile, deviceId) {
   var id = String(deviceId || "")
-  if (tile === "ping") return ["kcd", "ping", id]
   if (tile === "ring") return ["kcd", "findmyphone", id]
   if (tile === "clipboard") return id !== "" ? ["kcd", "clipboard", id] : ["kcd", "clipboard"]
   return null
@@ -292,6 +272,31 @@ function mprisCommand(action, deviceId) {
 // cancel it; no device id — requests can come from any phone.
 function pairCommand() {
   return ["kcd", "pair", "-y"]
+}
+
+// `kcd unpair <id>`: sends a rejection packet and drops the device from
+// the registry. No local state change is needed — the daemon publishes
+// device.removed and the panel follows the event.
+function unpairCommand(deviceId) {
+  var id = String(deviceId || "")
+  if (!isSafeDeviceId(id)) return null
+  return ["kcd", "unpair", id]
+}
+
+// The argv contract kcd-sftp.sh fulfills in both directions, spelled out
+// here next to every other builder (same convention as shareCommand).
+// kcd does the real work: credential wait, sshfs mount, file-manager
+// hand-off, and fusermount cleanup on unmount.
+function mountCommand(deviceId) {
+  var id = String(deviceId || "")
+  if (!isSafeDeviceId(id)) return null
+  return ["kcd", "sftp", "mount", id]
+}
+
+function unmountCommand(deviceId) {
+  var id = String(deviceId || "")
+  if (!isSafeDeviceId(id)) return null
+  return ["kcd", "sftp", "unmount", id]
 }
 
 // `kcd share <id> <path>`: single file only, directories rejected by the
@@ -358,26 +363,6 @@ function progress(pos, length) {
   return Math.max(0, Math.min(1, p / l))
 }
 
-// Parse `kcd battery --json <id>` output, e.g.
-// '{"charge":69,"charging":false,"deviceId":"..."}', falling back to the
-// legacy human format "Battery: 43% (charging)" for older binaries.
-// Returns { charge, charging } or null.
-function parseBatteryOutput(text) {
-  var raw = String(text || "").trim()
-  if (raw.charAt(0) === "{") {
-    try {
-      var parsed = JSON.parse(raw)
-      var quick = normalizeBattery(parsed)
-      if (quick) return quick
-    } catch (e) {}
-  }
-  var m = raw.match(/(\d+)\s*%[^()]*\(([^)]+)\)/)
-  if (!m) return null
-  var state = String(m[2] || "")
-  var charging = /charging/i.test(state) && !/discharging/i.test(state)
-  return { charge: parseInt(m[1], 10), charging: charging }
-}
-
 // Sticky single-device framing: keep the previously selected device first
 // while it is still present and usable (paired+connected), so two paired
 // phones don't flap the auto-selection (and reset battery/track) on every
@@ -414,7 +399,6 @@ function parseVersionOutput(text) {
 if (typeof module !== "undefined") {
   module.exports = {
     normalizeDevice: normalizeDevice,
-    parseDevicesOutput: parseDevicesOutput,
     normalizeDevices: normalizeDevices,
     normalizeBattery: normalizeBattery,
     normalizeSignal: normalizeSignal,
@@ -424,12 +408,13 @@ if (typeof module !== "undefined") {
     pickPairedDevice: pickPairedDevice,
     pickAutoDevice: pickAutoDevice,
     normalizeTrack: normalizeTrack,
-    parseMprisStatus: parseMprisStatus,
-    parseBatteryOutput: parseBatteryOutput,
     parseVersionOutput: parseVersionOutput,
     isSafeDeviceId: isSafeDeviceId,
     configTomlPath: configTomlPath,
     pairCommand: pairCommand,
+    unpairCommand: unpairCommand,
+    mountCommand: mountCommand,
+    unmountCommand: unmountCommand,
     shareCommand: shareCommand,
     screenshotShareCommand: screenshotShareCommand,
     stickDevice: stickDevice,

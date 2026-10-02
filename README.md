@@ -23,7 +23,13 @@ transport controls, and single-press quick actions.
 ## Requires
 
 * Omarchy Quattro (`omarchy-shell`)
-* `kcd` daemon >= 1.18.0 with a paired phone
+* `kcd` daemon >= 1.22.0 with a paired phone
+* `sshfs`, only for the **Files** quick action
+
+The **Files** toggle needs a daemon that publishes SFTP mount state
+(`sftp.mounted` / `sftp.unmounted`, in 1.22.0). On an older daemon the
+mount still works, but the tile stays on "Files" instead of flipping to
+"Unmount"; tapping it again re-opens the folder rather than failing.
 
 ## Install
 
@@ -69,8 +75,16 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
 * Media card: album art, title/artist, prev / play-pause / next, wave
   seeker with smooth playhead.
 
-* Quick actions: **Ping**, **Ring**, **Clipboard**, **Share**,
-  **Screenshot** (live). Share
+* Quick actions, all live (they dim when the phone is unreachable):
+  **Ring**, **Screenshot**, **Clipboard**, then **Share** and **Files**
+  below. Files is a toggle: it mounts the phone's storage over SFTP
+  (`sshfs`) and opens it in your file manager, then turns into **Unmount**
+  while the mount is live. Mount state comes from the daemon
+  (`sftp.mounted` / `sftp.unmounted` events), so the tile is never guessing;
+  mounting is idempotent, so tapping twice just re-opens the folder. It
+  needs `sshfs` and a phone that granted storage permission, and reports
+  failures as a desktop notification.
+  Share
   picks one file with the native chooser (`omarchy-file-select`) and sends
   it via `kcd share`, reporting back as a desktop notification.
   Screenshot captures the focused monitor with `grim` (after the panel
@@ -85,6 +99,12 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
   first request, then stops). Daemon down? **Start daemon** primes the
   socket, then the next probe wakes the daemon on its own.
 
+* To unpair, **press and hold the phone name** in the panel header: the
+  dashboard has no tile or menu for it. A confirm dialog appears (Cancel is
+  preselected) before anything is sent, so a mis-hold costs you nothing.
+  Unpairing revokes trust on the desktop, so the phone must accept the
+  pairing again before it works.
+
 * Footer gear opens `kcd.toml` in Neovim. Footer right shows the live
   `kcd <version>`; click it to open `bethropolis/kcd` on GitHub.
 
@@ -94,10 +114,21 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
 
 ## How it works
 
-The panel boots from one `kcd watch --json` snapshot (devices + battery +
-media), then stays live on watch events. Position is drift-free math from
-the daemon's anchor stamp. Pure parsing lives in `Kcd.js` (Qt-free,
-testable under bun):
+The panel is event-driven end to end. It boots from one `kcd watch --json`
+snapshot (devices with battery, media, signal and SFTP mount state) and then
+stays live on watch events; the only CLI call left is `kcd --version`, used to
+detect whether the binary is installed at all. No timers poll: an unhealthy
+plugin spawns nothing, and steady-state idle CPU is 0% by construction.
+
+Position is drift-free math from the daemon's anchor stamp (`pos` +
+`posAnchorMs`), re-evaluated only while the panel is open and playing.
+Long-running work (the watch stream, pairing listen mode) lives in managed
+`Process` blocks in `KcdIo.qml`; one-shot sends go through
+`Quickshell.execDetached`, and the flows that need failure handling (share,
+screenshot, SFTP) go through the shell scripts so errors become
+notifications rather than silence.
+
+Pure parsing lives in `Kcd.js` (Qt-free, testable under bun):
 
 ```sh
 bun test tests/
@@ -114,6 +145,7 @@ bun test tests/
 | `KcdMissing.qml` / `KcdUnpaired.qml` | Empty-state panels |
 | `Kcd.js` | Device/track/event parsing + CLI argv builders |
 | `kcd-share.sh` | Share flow: native pick → `kcd share` → notification |
+| `kcd-sftp.sh` | Files flow: `kcd sftp mount` / `unmount` → classified failure notification |
 | `kcd-screenshot-share.sh` | Screenshot flow: `grim` → `/tmp` stage → `kcd share` → delete on `share.complete` |
 | `tests/kcd.test.js` | Bun suite for the `Kcd.js` helpers (`bun test tests/`) |
 

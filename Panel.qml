@@ -47,10 +47,11 @@ Panel {
   readonly property bool playing: io.playing
   readonly property string uiState: io.uiState
   readonly property bool pairing: io.pairing
+  readonly property string verificationKey: io.verificationKey
   readonly property bool startingDaemon: io.startingDaemon
 
   // Thin wrappers — functions can't alias.
-  function refresh(forceDevices) { io.refresh(forceDevices) }
+  function refresh() { io.refresh() }
   function togglePairing() { io.togglePairing() }
   function startDaemon() { io.startDaemon() }
   function runTile(tile) { io.runTile(tile) }
@@ -76,17 +77,35 @@ Panel {
   readonly property color contentDim: Qt.darker(contentForeground, 1.5)
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
+  // Unpair is a long-press on the header plus a confirm step, so the
+  // dashboard carries no affordance for it.
+  property bool unpairConfirmOpen: false
+
+  function requestUnpair() {
+    if (root.deviceId === "") return
+    root.unpairConfirmOpen = true
+  }
+
+  function confirmUnpair() {
+    root.unpairConfirmOpen = false
+    io.unpairDevice()
+  }
+
+  function cancelUnpair() {
+    root.unpairConfirmOpen = false
+  }
+
   function open() {
     openedFromHotkey = false
     setCenterHoverRevealSuppressed(false)
     root.controller.show()
-    root.refresh(false)
+    root.refresh()
   }
 
   function openFromHotkey() {
     openedFromHotkey = true
     root.controller.show()
-    root.refresh(false)
+    root.refresh()
     Qt.callLater(function() {
       if (root.opened) setCenterHoverRevealSuppressed(true)
     })
@@ -145,7 +164,9 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      onCloseRequested: root.close()
+      // While the confirm is up it owns the keys, so Escape cancels the
+      // dialog instead of closing the panel behind it.
+      onCloseRequested: root.unpairConfirmOpen ? root.cancelUnpair() : root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
       Flickable {
@@ -176,6 +197,7 @@ Panel {
             lastSeenText: root.lastSeenText
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
+            onUnpairRequested: root.requestUnpair()
           }
 
 
@@ -201,6 +223,7 @@ Panel {
             width: parent.width
             visible: root.uiState === "ready"
             liveConnected: root.liveConnected
+            storageMounted: io.storageMounted
             deviceName: root.deviceName
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
@@ -222,6 +245,7 @@ Panel {
             mode: root.uiState === "down" ? "down" : (root.uiState === "offline" ? "offline" : "unpaired")
             deviceName: root.pairedName
             pairing: root.pairing
+            verificationKey: root.verificationKey
             startingDaemon: root.startingDaemon
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
@@ -292,6 +316,26 @@ Panel {
             }
           }
         }
+      }
+
+      // Unpair confirm. Cancel stays the default selection, so Enter on an
+      // untouched dialog is the safe outcome.
+      ConfirmDialog {
+        id: unpairConfirm
+        anchors.fill: parent
+        z: 10
+        opened: root.unpairConfirmOpen
+        message: "Unpair " + root.deviceName + "? You'll have to accept the pairing on the phone again."
+        cancelText: "Cancel"
+        confirmText: "Unpair"
+        background: root.bar ? root.bar.background : Color.background
+        foreground: root.contentForeground
+        selectedBackground: Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
+        selectedText: Color.accent
+        fontFamily: root.contentFontFamily
+        cornerRadius: Style.cornerRadius
+        onCanceled: root.cancelUnpair()
+        onConfirmed: root.confirmUnpair()
       }
     }
   }

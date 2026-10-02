@@ -44,16 +44,22 @@ QtObject {
   // missing state the footer reads "kcd —".
   property string kcdVersion: "—"
   property bool versionOk: false
+  // Verification key from the last pair.requested, shown while pairing.
+  property string verificationKey: ""
   property bool installOk: false
   property bool installProbed: false
   property bool daemonUp: false
   property bool daemonProbed: false
   property bool watchAlive: true
+  // Set by reconnectWatch() so the death path it triggers restarts at
+  // once instead of backing off; cleared on use.
+  property bool watchRestartRequested: false
   property int watchBackoffMs: 2000
+  // True while the phone's storage is mounted. The daemon owns this: it
+  // arrives in the state.snapshot device summary and flips via the
+  // sftp.mounted / sftp.unmounted events.
+  readonly property bool storageMounted: autoDevice ? autoDevice.storageMounted === true : false
   property double ioStartMs: 0
-  // Last successful device-list intake (any path); gates the open-path
-  // devices respawn so every panel open doesn't re-poll a fresh list.
-  property double devicesRxMs: 0
   // Pairing listen mode (`kcd pair -y`): true while pairProc runs.
   // Auto-accepts the first incoming request then exits on its own.
   readonly property bool pairing: pairProc.running
@@ -105,54 +111,35 @@ QtObject {
     return tip
   }
 
-  // ---- IO: one-shot hydration (CLI) + live stream (kcd watch).
-  // One-shots that fail (missing binary, dead daemon) surface through
-  // their onExited handlers; nothing here blocks on success.
-  function refresh(forceDevices) {
-    var force = forceDevices !== false
-    io.ioStartMs = Date.now()
-    // Version probe re-runs on every refresh (not just until first
-    // success): a latched installOk would blind reopen to a removed
-    // binary. While the probe runs the flags hold, so there is no flash;
-    // on exit they carry current truth. One local sh spawn per open.
+  // ---- Refresh: the only CLI call left is the version probe.
+  // All panel state arrives over the watch stream (state.snapshot on
+  // connect, then battery/mpris/connectivity/device/pair events), so a
+  // refresh re-checks the binary and bounces the stream for a fresh
+  // snapshot instead of re-reading state through the CLI.
+  function refresh() {
+    // Re-runs on every refresh (not latched): a stale installOk would
+    // blind reopen to a removed binary. While the probe runs the flags
+    // hold, so there is no flash; on exit they carry current truth.
     if (!versionProc.running) {
       // Wrapped in sh so the spawn always reports an exit: a missing kcd
-      // binary fails the spawn itself (no onExited), which used to wedge
-      // the probes and strand the panel in zombie "ready". sh exits 127
+      // binary fails the spawn itself (no onExited). sh exits 127
       // instead, completing the probe as "missing".
       versionProc.command = ["sh", "-c", "kcd --version"]
       versionProc.running = true
     }
-    if (!devicesProc.running && (force || Date.now() - io.devicesRxMs > 120000)) {
-      devicesProc.command = ["sh", "-c", "kcd devices --json"]
-      devicesProc.running = true
-    }
-    io.fillGaps()
+    io.reconnectWatch()
   }
 
-  // One-shot fallbacks for anything the intake didn't hydrate:
-  // devices one-shots embed no battery/media (the top-up in
-  // applyDeviceList covers those); this covers the remaining paths.
-  // Stamps ioStartMs when it launches so late-cycle spawns get a full
-  // wedge-guard budget.
-  function fillGaps() {
-    if (io.deviceId === "" || !io.daemonUp) return
-    var needBattery = io.batteryCharge < 0 && !batteryProc.running
-    var needMpris = !io.track && !mprisProc.running
-    if (!needBattery && !needMpris) return
-    io.ioStartMs = Date.now()
-    if (needBattery) io.refreshBattery()
-    if (needMpris) {
-      mprisProc.command = ["sh", "-c", "kcd mpris status --json"]
-      mprisProc.running = true
-    }
-  }
-
-  function refreshBattery() {
-    if (batteryProc.running || io.deviceId === "" || !io.daemonUp) return
-    // Argv array, never a shell: deviceId is daemon-supplied and untrusted.
-    batteryProc.command = ["kcd", "battery", "--json", io.deviceId]
-    batteryProc.running = true
+  // Refresh as a stream bounce: every watch connect starts with a fresh
+  // state.snapshot, so this is a real re-read with no CLI round-trip.
+  // Drops the stream and lets the death path restart it immediately, so
+  // the intentional exit neither backs off nor blinks the panel "down".
+  function reconnectWatch() {
+    if (!io.installOk || !io.watchAlive) return
+    io.watchRestartTimer.stop()
+    io.watchBackoffMs = 2000
+    io.watchRestartRequested = true
+    io.watchAlive = false
   }
 
   // Pairing from a click: start `kcd pair -y` listen mode, or cancel a
@@ -182,21 +169,12 @@ QtObject {
     daemonProc.running = true
   }
 
-  function onDevicesOutput(text) {
-    io.daemonUp = true
-    io.daemonProbed = true
-    var devs = Kcd.parseDevicesOutput(text)
-    if (devs.length === 0 && io.devices.length > 0) return
-    io.applyDeviceList(devs)
-  }
-
-  // Shared device-list intake (devices one-shot + state.snapshot):
-  // selection, switch reset, summary hydration, one-shot fallbacks.
-  // Snapshot lists are authoritative full state (no empty-guard).
+  // Device-list intake from state.snapshot: the daemon's authoritative
+  // full state (devices with embedded battery/media/signal), so there is
+  // no partial list to top up and no empty-guard.
   function applyDeviceList(devs) {
     var prevId = io.deviceId
     io.devices = Kcd.stickDevice(devs, prevId)
-    io.devicesRxMs = Date.now()
     var switched = io.deviceId !== prevId
     if (switched) {
       trackClearTimer.stop()
@@ -210,15 +188,6 @@ QtObject {
         io.batteryCharging = ad.battery.charging === true
       }
       if (ad.media && Kcd.isFreshMedia(ad.media)) io.setTrack(ad.media)
-      // Devices one-shots embed no battery/media (unlike snapshots): top
-      // them up so a stale or poisoned value heals on intake instead of
-      // waiting for a change event that never comes at steady state.
-      // User/open-driven, overlap-guarded; snapshot intakes skip (embedded).
-      if (!ad.battery && !batteryProc.running) io.refreshBattery()
-      if (!ad.media && !mprisProc.running) {
-        mprisProc.command = ["sh", "-c", "kcd mpris status --json"]
-        mprisProc.running = true
-      }
       // A connected phone is seen now by definition (TCP up, packets
       // flowing) — the daemon stamp only moves on (re)connect, so it
       // would age while the phone sits next to you.
@@ -226,12 +195,7 @@ QtObject {
       else if (ad.lastSeen) io.lastSeenText = Kcd.formatLastSeen(ad.lastSeen)
       else if (switched) io.lastSeenText = "—"
     }
-    io.fillGaps()
     io.daemonText = devs.length > 0 ? "kcd — " + devs.length + " phone(s)" : "kcd — no phones"
-  }
-
-  function onMprisOutput(text) {
-    io.setTrack(Kcd.parseMprisStatus(text))
   }
 
   // Song-gap bridge: between tracks the player briefly reports empty
@@ -262,13 +226,6 @@ QtObject {
     return Math.max(0, base)
   }
 
-  function onBatteryOutput(text) {
-    var parsed = Kcd.parseBatteryOutput(text)
-    if (!parsed) return
-    io.batteryCharge = parsed.charge
-    io.batteryCharging = parsed.charging
-  }
-
   function onVersionOutput(text) {
     var v = Kcd.parseVersionOutput(text)
     if (!v) return
@@ -288,11 +245,27 @@ QtObject {
     if (!event || !event.type) return
     var type = event.type
     if (type === "device.connected") {
-      io.handleDeviceConnected(event.deviceId, event.timestamp)
+      io.handleDeviceConnected(event.deviceId, event.timestamp, event.payload)
     } else if (type === "device.disconnected") {
       io.handleDeviceDisconnected(event.deviceId, event.timestamp)
-    } else if (type === "pair.accepted" || type === "pair.requested" || type === "pair.rejected") {
-      io.refresh()
+    } else if (type === "device.added") {
+      io.handleDeviceAdded(event.deviceId, event.payload)
+    } else if (type === "device.removed") {
+      io.handleDeviceRemoved(event.deviceId)
+    } else if (type === "pair.requested") {
+      io.verificationKey = String((event.payload || {}).verificationKey || "")
+    } else if (type === "pair.accepted") {
+      io.verificationKey = ""
+      io.applyPairState(event.deviceId, "PAIRED")
+    } else if (type === "pair.rejected") {
+      io.verificationKey = ""
+      io.applyPairState(event.deviceId, "UNPAIRED")
+    } else if (type === "connectivity.update") {
+      io.applySignal(event.deviceId, event.payload)
+    } else if (type === "sftp.mounted") {
+      io.applyStorageMounted(event.deviceId, true)
+    } else if (type === "sftp.unmounted") {
+      io.applyStorageMounted(event.deviceId, false)
     } else if (type === "state.snapshot") {
       io.daemonUp = true
       io.daemonProbed = true
@@ -312,11 +285,98 @@ QtObject {
     }
   }
 
+  // First-seen device. Newer daemons send the whole device summary as the
+  // payload, so use it rather than guessing; kcd < that sends a bare name
+  // string, where the daemon reports strangers as UNPAIRED and disconnected
+  // (no auto-dial) and the next snapshot corrects the rest.
+  function handleDeviceAdded(id, payload) {
+    if (!id || !Kcd.isSafeDeviceId(id)) return
+    var devs = io.devices.slice()
+    for (var i = 0; i < devs.length; i++) {
+      if (devs[i].id === id) return
+    }
+    var dev = null
+    if (payload && typeof payload === "object") {
+      dev = Kcd.normalizeDevice(payload)
+    }
+    if (!dev) {
+      dev = {
+        id: String(id),
+        name: String((payload && typeof payload === "object" ? payload.name : payload) || id),
+        type: "phone", state: "UNPAIRED", connected: false,
+        battery: null, media: null, lastSeen: "", signal: null, storageMounted: false
+      }
+    }
+    devs.push(dev)
+    io.devices = devs
+    io.daemonText = devs.length + " phone(s)"
+  }
+
+  function handleDeviceRemoved(id) {
+    if (!id) return
+    var kept = []
+    for (var i = 0; i < io.devices.length; i++) {
+      if (io.devices[i].id !== id) kept.push(io.devices[i])
+    }
+    if (kept.length === io.devices.length) return
+    io.devices = kept
+    io.daemonText = kept.length + " phone(s)"
+  }
+
+  // The daemon owns SFTP mount state: it lands in the snapshot summary and
+  // flips here, so the Files tile never inspects the host's mount table.
+  function applyStorageMounted(id, mounted) {
+    if (!id) return
+    var updated = []
+    var found = false
+    for (var i = 0; i < io.devices.length; i++) {
+      var d = Object.assign({}, io.devices[i])
+      if (d.id === id) {
+        d.storageMounted = mounted === true
+        found = true
+      }
+      updated.push(d)
+    }
+    if (found) io.devices = updated
+  }
+
+  function applyPairState(id, state) {
+    if (!id) return
+    var updated = []
+    var found = false
+    for (var i = 0; i < io.devices.length; i++) {
+      var d = Object.assign({}, io.devices[i])
+      if (d.id === id) {
+        d.state = state
+        found = true
+      }
+      updated.push(d)
+    }
+    if (found) io.devices = updated
+  }
+
+  // connectivity.update keeps the header's network label live instead of
+  // frozen at whatever the last snapshot carried.
+  function applySignal(id, payload) {
+    if (!id) return
+    var signal = Kcd.normalizeSignal(payload)
+    if (!signal) return
+    var updated = []
+    var found = false
+    for (var i = 0; i < io.devices.length; i++) {
+      var d = Object.assign({}, io.devices[i])
+      if (d.id === id) {
+        d.signal = signal
+        found = true
+      }
+      updated.push(d)
+    }
+    if (found) io.devices = updated
+  }
+
   // Instant 0ms connect/disconnect handling: the watch event mutates the
-  // in-memory devices list directly instead of waiting a 100-300ms CLI
-  // round-trip (and refresh() would skip the spawn entirely when
-  // devicesProc was already running). refresh(true) after the fact only
-  // re-syncs names/battery for full daemon parity.
+  // in-memory devices list directly, so the UI flips without a CLI
+  // round-trip.
   function handleDeviceDisconnected(id, timestamp) {
     if (!id) return
     var updated = []
@@ -330,21 +390,18 @@ QtObject {
       }
       updated.push(d)
     }
-    if (!found) {
-      io.refresh(true)
-      return
+    if (found) {
+      io.devices = updated
+      if (io.deviceId === id) {
+        io.lastSeenText = timestamp ? Kcd.formatLastSeen(timestamp) : "Just now"
+        // Freeze media so the playhead can't ghost-creep on an offline
+        // phone (daemonUp stays true; liveTrack gating can't do this).
+        io.track = null
+      }
     }
-    io.devices = updated
-    if (io.deviceId === id) {
-      io.lastSeenText = timestamp ? Kcd.formatLastSeen(timestamp) : "Just now"
-      // Freeze media so the playhead can't ghost-creep on an offline
-      // phone (daemonUp stays true; liveTrack gating can't do this).
-      io.track = null
-    }
-    io.refresh(true)
   }
 
-  function handleDeviceConnected(id, timestamp) {
+  function handleDeviceConnected(id, timestamp, payload) {
     if (!id) return
     var updated = []
     var found = false
@@ -358,20 +415,45 @@ QtObject {
       updated.push(d)
     }
     if (!found) {
-      io.refresh(true)
-      return
+      // Connected before we ever saw device.added: adopt it from the
+      // event payload so the list never waits on the next snapshot.
+      io.handleDeviceAdded(id, payload)
+      updated = io.devices
+      found = true
     }
     io.devices = updated
     if (io.deviceId === id) {
       io.lastSeenText = "Now"
     }
-    io.refresh(true)
   }
 
   function runTile(tile) {
+    if (tile === "files") {
+      io.toggleStorage()
+      return
+    }
     var cmd = Kcd.tileCommand(tile, io.deviceId)
     if (!cmd) return
-    if ((tile === "ping" || tile === "ring") && io.deviceId === "") return
+    if (tile === "ring" && io.deviceId === "") return
+    Quickshell.execDetached(cmd)
+  }
+
+  // The Files tile toggles: mount when nothing is mounted, unmount when
+  // the phone's storage is live. No cooldown needed -- mount is idempotent
+  // upstream, so a repeat tap just re-opens the file manager.
+  function toggleStorage() {
+    if (io.deviceId === "") return
+    var mode = io.storageMounted ? "unmount" : "mount"
+    Quickshell.execDetached(["bash", io.pluginDir + "/kcd-sftp.sh", mode, io.deviceId])
+  }
+
+
+  // Revoke trust for the selected phone. No local state change: the
+  // daemon publishes device.removed and applyEvent drops the device, so
+  // the panel reaches the unpaired state on its own.
+  function unpairDevice() {
+    var cmd = Kcd.unpairCommand(io.deviceId)
+    if (!cmd) return
     Quickshell.execDetached(cmd)
   }
 
@@ -452,31 +534,32 @@ QtObject {
   // so a missing binary quiets the loop on the next open.
   function noteWatchFailure() {
     io.watchAlive = false
+    // A failed watch is proof the daemon isn't answering, so the probe is
+    // done even with no CLI one-shot left to say so (otherwise uiState
+    // would sit in "ready" forever with a dead daemon).
+    io.daemonProbed = true
     io.daemonUp = false
     if (!io.installOk) return
+    if (io.watchRestartRequested) {
+      // Deliberate bounce from reconnectWatch(): straight back up, no backoff.
+      io.watchRestartRequested = false
+      io.watchAlive = true
+      return
+    }
     io.daemonText = "kcd — reconnecting…"
     io.watchBackoffMs = Math.min(io.watchBackoffMs * 2, 30000)
     io.watchRestartTimer.restart()
   }
 
-  // Wedge guard: a one-shot that hasn't returned 20s after launch is
-  // reaped and its probe marked done, so a dead spawn can never block
-  // all future refreshes. Slow successes correct the flags on arrival.
-  // Sleeps unless a probe is in flight — a wedged proc keeps it awake
-  // until reaped, then it goes quiet again.
+  // Wedge guard: the version probe that hasn't returned 20s after launch
+  // is reaped and marked done, so a wedged spawn can never block future
+  // refreshes. Sleeps unless a probe is in flight.
   property Timer ioTimeout: Timer {
     interval: 5000
     repeat: true
-    running: io.devicesProc.running || io.mprisProc.running || io.batteryProc.running || io.versionProc.running
+    running: io.versionProc.running
     onTriggered: {
       if (io.ioStartMs === 0 || Date.now() - io.ioStartMs < 20000) return
-      if (io.devicesProc.running) {
-        io.devicesProc.running = false
-        io.daemonProbed = true
-        io.daemonUp = false
-      }
-      if (io.mprisProc.running) io.mprisProc.running = false
-      if (io.batteryProc.running) io.batteryProc.running = false
       if (io.versionProc.running) {
         io.versionProc.running = false
         io.installProbed = true
@@ -485,18 +568,20 @@ QtObject {
     }
   }
 
+
   // Panel-open and retry-tap refreshes, intake top-ups, and the watch
   // lifecycle (plus its spawn guard) are the only re-probe paths:
   // installing kcd is picked up on the next open or retry, and the
   // daemon's return arrives as a watch snapshot. No background timer —
   // an unhealthy plugin spawns nothing while the panel is closed.
 
-  // Runs only while the binary exists; the CLI itself backs off and
-  // reconnects while the daemon is down. `watchAlive` (never `running`
-  // directly) is flipped so the installOk gate binding stays intact.
+  // The plugin's only live channel: the daemon pushes a full state
+  // snapshot on connect and every later change as an event, so no CLI
+  // state reads exist. `watchAlive` (never `running` directly) is flipped
+  // so the installOk gate binding stays intact.
   property Process watchProc: Process {
     running: io.installOk && io.watchAlive
-    command: ["kcd", "watch", "--json", "--events", "device.connected,device.disconnected,battery.update,mpris.update,pair.accepted,pair.requested,pair.rejected"]
+    command: ["kcd", "watch", "--json", "--events", "device.added,device.removed,device.connected,device.disconnected,battery.update,mpris.update,connectivity.update,sftp.mounted,sftp.unmounted,pair.accepted,pair.requested,pair.rejected"]
     stdout: SplitParser {
       onRead: function(data) { io.noteWatchLine(); io.handleWatchLine(data) }
     }
@@ -505,37 +590,6 @@ QtObject {
     }
     onExited: function(exitCode) {
       io.noteWatchFailure()
-    }
-  }
-
-  property Process devicesProc: Process {
-    running: false
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: io.onDevicesOutput(text)
-    }
-    onExited: function(exitCode) {
-      io.daemonProbed = true
-      if (exitCode !== 0) {
-        io.daemonUp = false
-        if (io.devices.length === 0) io.daemonText = "kcd — unreachable"
-      }
-    }
-  }
-
-  property Process mprisProc: Process {
-    running: false
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: io.onMprisOutput(text)
-    }
-  }
-
-  property Process batteryProc: Process {
-    running: false
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: io.onBatteryOutput(text)
     }
   }
 

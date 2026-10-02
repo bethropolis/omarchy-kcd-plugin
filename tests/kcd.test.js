@@ -15,7 +15,8 @@ describe("normalizeDevice", () => {
       }),
     ).toEqual({
       id: "abc", name: "Pixel", type: "phone", state: "PAIRED",
-      connected: true, battery: null, media: null, lastSeen: "", signal: null,
+      connected: true, battery: null, media: null, lastSeen: "",
+      signal: null, storageMounted: false,
     });
   });
 
@@ -52,8 +53,31 @@ describe("normalizeDevice", () => {
     expect(Kcd.isSafeDeviceId("$(id)")).toBe(false);
     expect(Kcd.isSafeDeviceId("`id`")).toBe(false);
     expect(Kcd.isSafeDeviceId("a b")).toBe(false);
+    // A "." to ":" character range would quietly admit these.
+    expect(Kcd.isSafeDeviceId("a/b")).toBe(false);
+    expect(Kcd.isSafeDeviceId("a@b")).toBe(false);
     expect(Kcd.isSafeDeviceId("")).toBe(false);
     expect(Kcd.isSafeDeviceId(null)).toBe(false);
+  });
+
+  it("normalizeDevice reads the sftp mount block, absent means not mounted", () => {
+    expect(Kcd.normalizeDevice({ id: "a", sftp: { mounted: true, mountPoint: "/mnt/x" } }).storageMounted).toBe(true);
+    // The daemon omits the block unless a mount is live.
+    expect(Kcd.normalizeDevice({ id: "a" }).storageMounted).toBe(false);
+    expect(Kcd.normalizeDevice({ id: "a", sftp: { mounted: false } }).storageMounted).toBe(false);
+    expect(Kcd.normalizeDevice({ id: "a", sftp: null }).storageMounted).toBe(false);
+    expect(Kcd.normalizeDevice({ id: "a", sftp: "yes" }).storageMounted).toBe(false);
+  });
+
+  it("normalizeDevice handles the full device.added summary", () => {
+    const d = Kcd.normalizeDevice({
+      id: "newphone", name: "Pixel", type: "phone", state: "UNPAIRED",
+      last_seen: "2026-10-02T00:00:00Z", connected: false, cert_fp: "",
+    });
+    expect(d.name).toBe("Pixel");
+    expect(d.state).toBe("UNPAIRED");
+    expect(d.connected).toBe(false);
+    expect(d.lastSeen).toBe("2026-10-02T00:00:00Z");
   });
 
   it("drops hostile-ID devices at intake", () => {
@@ -65,24 +89,12 @@ describe("normalizeDevice", () => {
   });
 });
 
-describe("parseDevicesOutput / normalizeDevices", () => {
-  it("returns [] on empty or garbage", () => {
-    expect(Kcd.parseDevicesOutput("")).toEqual([]);
-    expect(Kcd.parseDevicesOutput("  ")).toEqual([]);
-    expect(Kcd.parseDevicesOutput("not json")).toEqual([]);
-  });
-
-  it("wraps a single object into a list", () => {
-    const out = Kcd.parseDevicesOutput('{"id":"a","state":"PAIRED"}');
-    expect(out.length).toBe(1);
-    expect(out[0].id).toBe("a");
-  });
-
+describe("normalizeDevices", () => {
   it("drops entries without ids", () => {
-    expect(Kcd.parseDevicesOutput('[{}, {"id":"a"}]').map((d) => d.id)).toEqual(["a"]);
+    expect(Kcd.normalizeDevices([{}, { id: "a" }]).map((d) => d.id)).toEqual(["a"]);
   });
 
-  it("normalizeDevices rejects non-arrays", () => {
+  it("rejects non-arrays", () => {
     expect(Kcd.normalizeDevices(null)).toEqual([]);
     expect(Kcd.normalizeDevices({})).toEqual([]);
   });
@@ -134,24 +146,6 @@ describe("normalizeBattery", () => {
   });
 });
 
-describe("parseBatteryOutput", () => {
-  it("parses the --json object", () => {
-    expect(Kcd.parseBatteryOutput('{"charge":69,"charging":false,"deviceId":"x"}')).toEqual({
-      charge: 69, charging: false,
-    });
-  });
-
-  it("parses the legacy human format", () => {
-    expect(Kcd.parseBatteryOutput("Battery: 43% (charging)")).toEqual({ charge: 43, charging: true });
-    expect(Kcd.parseBatteryOutput("Battery: 43% (discharging)")).toEqual({ charge: 43, charging: false });
-  });
-
-  it("returns null on garbage", () => {
-    expect(Kcd.parseBatteryOutput("")).toBeNull();
-    expect(Kcd.parseBatteryOutput("hello")).toBeNull();
-  });
-});
-
 describe("media helpers", () => {
   const track = (over = {}) => ({
     player: "spotify", title: "Song", artist: "A", album: "B",
@@ -171,13 +165,6 @@ describe("media helpers", () => {
     expect(Kcd.isFreshMedia(track({ isPlaying: false, mediaAgeMs: 5000 }))).toBe(true);
     expect(Kcd.isFreshMedia(track({ isPlaying: false, mediaAgeMs: 60000 }))).toBe(false);
     expect(Kcd.isFreshMedia(null)).toBe(false);
-  });
-
-  it("parseMprisStatus returns the first valid track or null", () => {
-    expect(Kcd.parseMprisStatus("")).toBeNull();
-    expect(Kcd.parseMprisStatus("[]")).toBeNull();
-    expect(Kcd.parseMprisStatus("nope")).toBeNull();
-    expect(Kcd.parseMprisStatus('[{"title":"T"}]').title).toBe("T");
   });
 
   it("isUsableArt only allows loadable urls", () => {
@@ -207,15 +194,38 @@ describe("parseWatchLine", () => {
       event: { type: "battery.update", deviceId: "d", timestamp: "", payload: { charge: 80 } },
     });
   });
+
+  it("carries the string payload device.added sends", () => {
+    const r = Kcd.parseWatchLine('{"type":"device.added","deviceId":"d","payload":"Pixel 8"}');
+    expect(r.event.type).toBe("device.added");
+    expect(r.event.payload).toBe("Pixel 8");
+  });
+
+  it("carries the pair.requested verification key", () => {
+    const r = Kcd.parseWatchLine('{"type":"pair.requested","deviceId":"d","payload":{"name":"P","type":"phone","verificationKey":"ABCD1234EFGH5678"}}');
+    expect(r.event.payload.verificationKey).toBe("ABCD1234EFGH5678");
+  });
+});
+
+describe("connectivity payload", () => {
+  it("normalizeSignal reads a live connectivity.update payload", () => {
+    const ev = Kcd.parseWatchLine('{"type":"connectivity.update","deviceId":"d","payload":{"signalStrengths":{"wlan0":{"networkType":"Wi-Fi","networkDetailedType":"Wi-Fi","signalStrength":4}}}}');
+    expect(Kcd.normalizeSignal(ev.event.payload).label).toBe("Wi-Fi");
+  });
 });
 
 describe("command builders", () => {
   it("tileCommand maps tiles and guards ping/ring", () => {
-    expect(Kcd.tileCommand("ping", "d")).toEqual(["kcd", "ping", "d"]);
     expect(Kcd.tileCommand("ring", "d")).toEqual(["kcd", "findmyphone", "d"]);
     expect(Kcd.tileCommand("clipboard", "d")).toEqual(["kcd", "clipboard", "d"]);
     expect(Kcd.tileCommand("clipboard", "")).toEqual(["kcd", "clipboard"]);
     expect(Kcd.tileCommand("nope", "d")).toBeNull();
+  });
+
+  it("tileCommand no longer resolves removed or script-backed tiles", () => {
+    // Ping was removed; "files" goes through kcd-sftp.sh, not execDetached.
+    expect(Kcd.tileCommand("ping", "d")).toBeNull();
+    expect(Kcd.tileCommand("files", "d")).toBeNull();
   });
 
   it("watchCommand joins event filters", () => {
@@ -228,6 +238,23 @@ describe("command builders", () => {
     expect(Kcd.mprisCommand("next", "")).toEqual(["kcd", "mpris", "next"]);
     expect(Kcd.pairCommand()).toEqual(["kcd", "pair", "-y"]);
   });
+
+  it("unpairCommand builds argv and guards the device id", () => {
+    expect(Kcd.unpairCommand("9a5c23ea_7195_4da1")).toEqual(["kcd", "unpair", "9a5c23ea_7195_4da1"]);
+    expect(Kcd.unpairCommand("")).toBeNull();
+    expect(Kcd.unpairCommand(null)).toBeNull();
+    expect(Kcd.unpairCommand("x'; rm -rf ~; echo '")).toBeNull();
+  });
+
+  it("mountCommand / unmountCommand build argv and guard the device id", () => {
+    expect(Kcd.mountCommand("9a5c23ea_7195_4da1")).toEqual(["kcd", "sftp", "mount", "9a5c23ea_7195_4da1"]);
+    expect(Kcd.unmountCommand("9a5c23ea_7195_4da1")).toEqual(["kcd", "sftp", "unmount", "9a5c23ea_7195_4da1"]);
+    for (const bad of ["", null, "x'; id; echo '"]) {
+      expect(Kcd.mountCommand(bad)).toBeNull();
+      expect(Kcd.unmountCommand(bad)).toBeNull();
+    }
+  });
+
 
   it("shareCommand and screenshotShareCommand reject blanks", () => {
     expect(Kcd.shareCommand("d", "/f")).toEqual(["kcd", "share", "d", "/f"]);

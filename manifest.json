@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.bethropolis.kcd",
   "name": "Omarchy KCD",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "bethropolis",
   "license": "MIT",
-  "description": "Bar widget and dashboard for kcd, a KDE Connect protocol daemon written in Go: phone status, battery, now-playing controls, file share, and screenshot-to-phone.",
+  "description": "Bar widget and dashboard for kcd, a KDE Connect protocol daemon written in Go: phone status, battery, now-playing controls, file share, screenshot-to-phone, and mounting the phone's storage over SFTP.",
   "homepage": "https://github.com/bethropolis/omarchy-kcd-plugin",
   "repository": "https://github.com/bethropolis/omarchy-kcd-plugin.git",
   "keywords": [
@@ -16,6 +16,7 @@
     "media",
     "share",
     "screenshot",
+    "sftp",
     "android"
   ],
   "kinds": [
@@ -26,7 +27,7 @@
   },
   "barWidget": {
     "displayName": "kcd Phone",
-    "description": "Phone status, battery, media, share and screenshots via kcd",
+    "description": "Phone status, battery, media, share, screenshots and storage via kcd",
     "category": "Phone",
     "allowMultiple": false,
     "defaultSection": "right"
