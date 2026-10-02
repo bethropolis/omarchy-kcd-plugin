@@ -3,12 +3,11 @@ import qs.Commons
 import qs.Ui
 
 // Quick-action tiles: props in, signals out. Two rows — three compact
-// tiles, then two half-width so the grid stays balanced. Tiles are ordered
-// by how often they get used, most-tapped first: Ring, Screenshot, Share
-// up top, Files and Clipboard below. Tile enablement follows
-// liveConnected. Glyph codepoints are authoritative here — FontAwesome
-// range only (the panel font lacks the Material block, e.g. U+F048A
-// renders blank).
+// tiles, then two half-width so the grid stays balanced. Ordered by how
+// often they get used, most-tapped first: Ring, Screenshot, Clipboard up
+// top; Share and Files below. Tile enablement follows liveConnected.
+// Glyph codepoints are authoritative here — FontAwesome range only (the
+// panel font lacks the Material block, e.g. U+F048A renders blank).
 Column {
   id: actions
   width: parent.width
@@ -65,13 +64,13 @@ Column {
 
     QuickTile {
       width: parent.cellWidth
-      iconText: ""
-      label: "Share"
-      tooltipText: "Send a file to " + actions.deviceName
+      iconText: ""
+      label: "Clipboard"
+      tooltipText: "Sync clipboard"
       foreground: actions.foreground
       fontFamily: actions.fontFamily
       enabled: actions.liveConnected
-      onTapped: actions.shareRequested()
+      onTapped: actions.tileTapped("clipboard")
     }
   }
 
@@ -83,6 +82,17 @@ Column {
 
     QuickTile {
       width: parent.cellWidth
+      iconText: ""
+      label: "Share"
+      tooltipText: "Send a file to " + actions.deviceName
+      foreground: actions.foreground
+      fontFamily: actions.fontFamily
+      enabled: actions.liveConnected
+      onTapped: actions.shareRequested()
+    }
+
+    QuickTile {
+      width: parent.cellWidth
       iconText: ""
       label: "Files"
       tooltipText: "Mount the phone's storage and open it"
@@ -90,17 +100,6 @@ Column {
       fontFamily: actions.fontFamily
       enabled: actions.liveConnected
       onTapped: actions.tileTapped("files")
-    }
-
-    QuickTile {
-      width: parent.cellWidth
-      iconText: ""
-      label: "Clipboard"
-      tooltipText: "Sync clipboard"
-      foreground: actions.foreground
-      fontFamily: actions.fontFamily
-      enabled: actions.liveConnected
-      onTapped: actions.tileTapped("clipboard")
     }
   }
 }

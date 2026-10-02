@@ -70,8 +70,9 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
 * Media card: album art, title/artist, prev / play-pause / next, wave
   seeker with smooth playhead.
 
-* Quick actions: **Files**, **Ring**, **Clipboard**, **Share**,
-  **Screenshot** (live). Files mounts the phone's storage over SFTP
+* Quick actions, all live (they dim when the phone is unreachable):
+  **Ring**, **Screenshot**, **Clipboard**, then **Share** and **Files**
+  below. Files mounts the phone's storage over SFTP
   (`sshfs`) and opens it in your file manager; it needs `sshfs` and a phone
   that granted storage permission, and reports failures as a desktop
   notification. Share
