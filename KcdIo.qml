@@ -55,13 +55,10 @@ QtObject {
   // once instead of backing off; cleared on use.
   property bool watchRestartRequested: false
   property int watchBackoffMs: 2000
-  // Timestamp of the last storage mount/unmount request; guards repeat taps.
-  property double mountRequestMs: 0
-  // While in the future, the mount table is re-read every second (a mount
-  // can take ~20s to get credentials). Zero at steady state.
-  property double mountWatchUntilMs: 0
-  // True while the phone's storage is mounted (read from /proc/mounts).
-  readonly property bool sftpMounted: Kcd.isSftpMounted(io.mountsFile.text(), io.deviceId)
+  // True while the phone's storage is mounted. The daemon owns this: it
+  // arrives in the state.snapshot device summary and flips via the
+  // sftp.mounted / sftp.unmounted events.
+  readonly property bool storageMounted: autoDevice ? autoDevice.storageMounted === true : false
   property double ioStartMs: 0
   // Pairing listen mode (`kcd pair -y`): true while pairProc runs.
   // Auto-accepts the first incoming request then exits on its own.
@@ -120,9 +117,6 @@ QtObject {
   // refresh re-checks the binary and bounces the stream for a fresh
   // snapshot instead of re-reading state through the CLI.
   function refresh() {
-    // Mount state is not event-driven upstream, so an open is one of the
-    // few moments worth re-reading the mount table.
-    io.watchMountState(0)
     // Re-runs on every refresh (not latched): a stale installOk would
     // blind reopen to a removed binary. While the probe runs the flags
     // hold, so there is no flash; on exit they carry current truth.
@@ -268,6 +262,10 @@ QtObject {
       io.applyPairState(event.deviceId, "UNPAIRED")
     } else if (type === "connectivity.update") {
       io.applySignal(event.deviceId, event.payload)
+    } else if (type === "sftp.mounted") {
+      io.applyStorageMounted(event.deviceId, true)
+    } else if (type === "sftp.unmounted") {
+      io.applyStorageMounted(event.deviceId, false)
     } else if (type === "state.snapshot") {
       io.daemonUp = true
       io.daemonProbed = true
@@ -287,20 +285,29 @@ QtObject {
     }
   }
 
-  // First-seen device: the daemon reports strangers as UNPAIRED and
-  // disconnected (no auto-dial), so a discovered device starts that way
-  // and gets corrected by the next snapshot once it pairs.
+  // First-seen device. Newer daemons send the whole device summary as the
+  // payload, so use it rather than guessing; kcd < that sends a bare name
+  // string, where the daemon reports strangers as UNPAIRED and disconnected
+  // (no auto-dial) and the next snapshot corrects the rest.
   function handleDeviceAdded(id, payload) {
     if (!id || !Kcd.isSafeDeviceId(id)) return
-    var name = String((payload && typeof payload === "object" ? payload.name : payload) || id)
     var devs = io.devices.slice()
     for (var i = 0; i < devs.length; i++) {
       if (devs[i].id === id) return
     }
-    devs.push({
-      id: String(id), name: name, type: "phone", state: "UNPAIRED",
-      connected: false, battery: null, media: null, lastSeen: "", signal: null
-    })
+    var dev = null
+    if (payload && typeof payload === "object") {
+      dev = Kcd.normalizeDevice(payload)
+    }
+    if (!dev) {
+      dev = {
+        id: String(id),
+        name: String((payload && typeof payload === "object" ? payload.name : payload) || id),
+        type: "phone", state: "UNPAIRED", connected: false,
+        battery: null, media: null, lastSeen: "", signal: null, storageMounted: false
+      }
+    }
+    devs.push(dev)
     io.devices = devs
     io.daemonText = devs.length + " phone(s)"
   }
@@ -314,6 +321,23 @@ QtObject {
     if (kept.length === io.devices.length) return
     io.devices = kept
     io.daemonText = kept.length + " phone(s)"
+  }
+
+  // The daemon owns SFTP mount state: it lands in the snapshot summary and
+  // flips here, so the Files tile never inspects the host's mount table.
+  function applyStorageMounted(id, mounted) {
+    if (!id) return
+    var updated = []
+    var found = false
+    for (var i = 0; i < io.devices.length; i++) {
+      var d = Object.assign({}, io.devices[i])
+      if (d.id === id) {
+        d.storageMounted = mounted === true
+        found = true
+      }
+      updated.push(d)
+    }
+    if (found) io.devices = updated
   }
 
   function applyPairState(id, state) {
@@ -355,9 +379,6 @@ QtObject {
   // round-trip.
   function handleDeviceDisconnected(id, timestamp) {
     if (!id) return
-    // The daemon tears the SFTP mount down on disconnect, so the mount
-    // table is stale the moment this lands.
-    if (id === io.deviceId) io.watchMountState(0)
     var updated = []
     var found = false
     for (var i = 0; i < io.devices.length; i++) {
@@ -418,32 +439,14 @@ QtObject {
   }
 
   // The Files tile toggles: mount when nothing is mounted, unmount when
-  // the phone's storage is live. Rate-limited because a second mount onto
-  // a live mountpoint fails (kcd >= 1.19 guards that itself; the cooldown
-  // keeps released daemons from error-spamming).
+  // the phone's storage is live. No cooldown needed -- mount is idempotent
+  // upstream, so a repeat tap just re-opens the file manager.
   function toggleStorage() {
-    if (io.deviceId === "" || Date.now() - io.mountRequestMs < 10000) return
-    io.mountRequestMs = Date.now()
-    io.watchMountState(25000)
-    var mode = io.sftpMounted ? "unmount" : "mount"
+    if (io.deviceId === "") return
+    var mode = io.storageMounted ? "unmount" : "mount"
     Quickshell.execDetached(["bash", io.pluginDir + "/kcd-sftp.sh", mode, io.deviceId])
   }
 
-  // kcd publishes no mount-state event, so the mount table is the source of
-  // truth. Re-read it on demand: when a mount/unmount is in flight (the
-  // credential wait alone can take 20s), on connect/disconnect (the daemon
-  // auto-unmounts then), and whenever the panel opens. /proc files send no
-  // change notification, hence the explicit reload.
-  function watchMountState(durationMs) {
-    io.mountWatchUntilMs = Date.now() + (durationMs || 0)
-    io.mountsFile.reload()
-  }
-
-  property FileView mountsFile: FileView {
-    path: "/proc/mounts"
-    // Read on construction and after every reload; never block.
-    printErrors: false
-  }
 
   // Revoke trust for the selected phone. No local state change: the
   // daemon publishes device.removed and applyEvent drops the device, so
@@ -565,15 +568,6 @@ QtObject {
     }
   }
 
-  // Mount-state settle timer. /proc sends no change notifications, so a
-  // mount in flight is watched by re-reading the table. The `running`
-  // binding stops it once the window closes, so steady state is silent.
-  property Timer mountWatchTimer: Timer {
-    interval: 1000
-    repeat: true
-    running: io.mountWatchUntilMs > Date.now()
-    onTriggered: io.mountsFile.reload()
-  }
 
   // Panel-open and retry-tap refreshes, intake top-ups, and the watch
   // lifecycle (plus its spawn guard) are the only re-probe paths:
@@ -587,7 +581,7 @@ QtObject {
   // so the installOk gate binding stays intact.
   property Process watchProc: Process {
     running: io.installOk && io.watchAlive
-    command: ["kcd", "watch", "--json", "--events", "device.added,device.removed,device.connected,device.disconnected,battery.update,mpris.update,connectivity.update,pair.accepted,pair.requested,pair.rejected"]
+    command: ["kcd", "watch", "--json", "--events", "device.added,device.removed,device.connected,device.disconnected,battery.update,mpris.update,connectivity.update,sftp.mounted,sftp.unmounted,pair.accepted,pair.requested,pair.rejected"]
     stdout: SplitParser {
       onRead: function(data) { io.noteWatchLine(); io.handleWatchLine(data) }
     }

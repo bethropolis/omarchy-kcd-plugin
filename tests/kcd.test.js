@@ -15,7 +15,8 @@ describe("normalizeDevice", () => {
       }),
     ).toEqual({
       id: "abc", name: "Pixel", type: "phone", state: "PAIRED",
-      connected: true, battery: null, media: null, lastSeen: "", signal: null,
+      connected: true, battery: null, media: null, lastSeen: "",
+      signal: null, storageMounted: false,
     });
   });
 
@@ -57,6 +58,26 @@ describe("normalizeDevice", () => {
     expect(Kcd.isSafeDeviceId("a@b")).toBe(false);
     expect(Kcd.isSafeDeviceId("")).toBe(false);
     expect(Kcd.isSafeDeviceId(null)).toBe(false);
+  });
+
+  it("normalizeDevice reads the sftp mount block, absent means not mounted", () => {
+    expect(Kcd.normalizeDevice({ id: "a", sftp: { mounted: true, mountPoint: "/mnt/x" } }).storageMounted).toBe(true);
+    // The daemon omits the block unless a mount is live.
+    expect(Kcd.normalizeDevice({ id: "a" }).storageMounted).toBe(false);
+    expect(Kcd.normalizeDevice({ id: "a", sftp: { mounted: false } }).storageMounted).toBe(false);
+    expect(Kcd.normalizeDevice({ id: "a", sftp: null }).storageMounted).toBe(false);
+    expect(Kcd.normalizeDevice({ id: "a", sftp: "yes" }).storageMounted).toBe(false);
+  });
+
+  it("normalizeDevice handles the full device.added summary", () => {
+    const d = Kcd.normalizeDevice({
+      id: "newphone", name: "Pixel", type: "phone", state: "UNPAIRED",
+      last_seen: "2026-10-02T00:00:00Z", connected: false, cert_fp: "",
+    });
+    expect(d.name).toBe("Pixel");
+    expect(d.state).toBe("UNPAIRED");
+    expect(d.connected).toBe(false);
+    expect(d.lastSeen).toBe("2026-10-02T00:00:00Z");
   });
 
   it("drops hostile-ID devices at intake", () => {
@@ -231,31 +252,6 @@ describe("command builders", () => {
     expect(Kcd.unmountCommand("x'; id; echo '")).toBeNull();
   });
 
-  it("isSftpMounted reads the kernel mount table", () => {
-    // Verbatim shape of a real /proc/mounts line for a live sshfs mount.
-    const mounted = [
-      "/dev/sda2 /home/bet ext4 rw,relatime 0 0",
-      "kdeconnect@192.168.1.134:/storage/emulated/0 /home/bet/Downloads/kcd/mnt/kcd-sftp-9a5c23ea_7195_4da1_b766_282b7256a02d fuse.sshfs rw,nosuid,nodev,relatime,user_id=1000,group_id=1000 0 0",
-    ].join("\n");
-    expect(Kcd.isSftpMounted(mounted, "9a5c23ea_7195_4da1_b766_282b7256a02d")).toBe(true);
-    // A custom [sftp] mount_dir must not matter: only the suffix does.
-    expect(Kcd.isSftpMounted(
-      "x /var/tmp/whatever/kcd-sftp-dev1 fuse.sshfs rw 0 0", "dev1")).toBe(true);
-
-    // Same directory, no mount: a leftover mountpoint dir is not a mount.
-    const leftover = "/dev/sda2 /home/bet ext4 rw,relatime 0 0\n";
-    expect(Kcd.isSftpMounted(leftover, "9a5c23ea_7195_4da1_b766_282b7256a02d")).toBe(false);
-
-    // A different phone's mount must not register.
-    expect(Kcd.isSftpMounted(mounted, "448f0fb4_fcdc_48c6_86e3_9840d63a7ba0")).toBe(false);
-    // Another filesystem type on the same path is not an sshfs mount.
-    expect(Kcd.isSftpMounted("x /mnt/kcd-sftp-abc tmpfs rw 0 0", "abc")).toBe(false);
-    // A longer id that merely starts with ours is not our mount.
-    expect(Kcd.isSftpMounted("x /mnt/kcd-sftp-abc-extra fuse.sshfs rw 0 0", "abc")).toBe(false);
-    expect(Kcd.isSftpMounted("", "abc")).toBe(false);
-    expect(Kcd.isSftpMounted(null, null)).toBe(false);
-    expect(Kcd.isSftpMounted(mounted, "x'; id; echo '")).toBe(false);
-  });
 
   it("shareCommand and screenshotShareCommand reject blanks", () => {
     expect(Kcd.shareCommand("d", "/f")).toEqual(["kcd", "share", "d", "/f"]);

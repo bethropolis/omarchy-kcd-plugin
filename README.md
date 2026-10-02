@@ -23,8 +23,13 @@ transport controls, and single-press quick actions.
 ## Requires
 
 * Omarchy Quattro (`omarchy-shell`)
-* `kcd` daemon >= 1.18.0 with a paired phone
+* `kcd` daemon >= 1.22.0 with a paired phone
 * `sshfs`, only for the **Files** quick action
+
+The **Files** toggle needs a daemon that publishes SFTP mount state
+(`sftp.mounted` / `sftp.unmounted`, in 1.22.0). On an older daemon the
+mount still works, but the tile stays on "Files" instead of flipping to
+"Unmount"; tapping it again re-opens the folder rather than failing.
 
 ## Install
 
@@ -72,10 +77,14 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
 
 * Quick actions, all live (they dim when the phone is unreachable):
   **Ring**, **Screenshot**, **Clipboard**, then **Share** and **Files**
-  below. Files mounts the phone's storage over SFTP
-  (`sshfs`) and opens it in your file manager; it needs `sshfs` and a phone
-  that granted storage permission, and reports failures as a desktop
-  notification. Share
+  below. Files is a toggle: it mounts the phone's storage over SFTP
+  (`sshfs`) and opens it in your file manager, then turns into **Unmount**
+  while the mount is live. Mount state comes from the daemon
+  (`sftp.mounted` / `sftp.unmounted` events), so the tile is never guessing;
+  mounting is idempotent, so tapping twice just re-opens the folder. It
+  needs `sshfs` and a phone that granted storage permission, and reports
+  failures as a desktop notification.
+  Share
   picks one file with the native chooser (`omarchy-file-select`) and sends
   it via `kcd share`, reporting back as a desktop notification.
   Screenshot captures the focused monitor with `grim` (after the panel

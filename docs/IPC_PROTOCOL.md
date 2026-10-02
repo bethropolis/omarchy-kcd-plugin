@@ -101,6 +101,7 @@ Fields:
 | `battery` | object (optional) | `{"charge": 85, "charging": true, "batteryAgeMs": 1234}` — cached battery state; absent when the device never reported |
 | `media` | object (optional) | Cached `NowPlaying` plus `mediaAgeMs` (ms since the phone reported); absent when the device never reported media |
 | `signal` | object (optional) | Cached connectivity report (`{"signalStrengths": {...}}`); absent when never reported |
+| `sftp` | object (optional) | `{"mounted": true, "mountPoint": "/path/to/mnt"}`; present only while the device's storage is mounted, so absence means not mounted |
 
 #### `pair`
 
@@ -533,8 +534,13 @@ Get SFTP connection details for a device.
 **Request payload:**
 
 ```json
-{"deviceId": "a1b2c3d4e5f6_..."}
+{"deviceId": "a1b2c3d4e5f6_...", "showPassword": false}
 ```
+
+`showPassword` is optional and defaults to `false`. The password is a working
+credential for the phone's SFTP server, so the daemon omits the field entirely
+unless the client asks for it. A client that needs the credentials to mount
+can take them from the `sftp.mount` event instead, which always carries them.
 
 **Response data:** `SftpInfo`
 
@@ -853,7 +859,24 @@ Client authors are encouraged to adopt a similar strategy.
 
 A new device was discovered on the network.
 
-**Payload:** `string` (the device name)
+**Payload:** `DeviceInfo` — the same shape as one entry of `devices`:
+
+```json
+{
+  "id": "a1b2c3d4e5f6_...",
+  "name": "Pixel 9",
+  "type": "phone",
+  "state": "UNPAIRED",
+  "cert_fp": "",
+  "last_seen": "2026-05-27T10:00:00Z",
+  "connected": false
+}
+```
+
+Clients should add the device directly from this payload rather than
+synthesising an entry from the event envelope, which carries only the device
+id. Cached sub-states (`battery`, `media`, `signal`, `sftp`) are absent here:
+none have been reported at discovery time, and they arrive in their own events.
 
 #### `device.removed`
 
@@ -1157,6 +1180,38 @@ SFTP credentials received (success) or error.
 {"error": "SFTP server rejected credentials"}
 ```
 
+Note that the success payload carries the live SFTP password. Subscribers to
+`sftp.mount` receive a working credential and must not surface it.
+
+#### `sftp.mounted`
+
+The device's filesystem finished mounting. Fired on the mount transition, not
+when credentials arrive — a client can subscribe to this alone to track mount
+state.
+
+**Payload:**
+
+```json
+{"mountPoint": "/home/user/Downloads/kcd/mnt/kcd-sftp-a1b2c3d4", "volume": "/storage/ABCD-1234"}
+```
+
+`volume` is present only when a specific storage volume was mounted; when the
+daemon auto-selected the phone's default volume the key is absent.
+
+#### `sftp.unmounted`
+
+The device's filesystem was released.
+
+**Payload:**
+
+```json
+{"mountPoint": "/home/user/Downloads/kcd/mnt/kcd-sftp-a1b2c3d4"}
+```
+
+Mount state is also available without waiting for an event: `state.snapshot`
+carries a `sftp` object per mounted device, and `sftp_info` returns `mounted`
+and `mountPoint`.
+
 ### 5.10 Volume Events
 
 #### `volume.update`
@@ -1258,7 +1313,47 @@ this daemon to ring).
 
 **Payload:** none (`null`)
 
-### 5.14 MPRIS Events
+### 5.14 RunCommand Events
+
+#### `runcommand.output`
+
+Output of a command the phone triggered locally, in three shapes distinguished
+by `status`.
+
+**Payload (`status: "started"`):**
+
+```json
+{"id": 7, "key": "uptime", "status": "started"}
+```
+
+**Payload (`status: "output"`)** — a batch of lines:
+
+```json
+{"id": 7, "key": "uptime", "status": "output", "stdout": ["up 3 days"], "stderr": [], "truncated": false}
+```
+
+**Payload (`status: "finished"`):**
+
+```json
+{"id": 7, "key": "uptime", "status": "finished", "success": true, "output": "up 3 days"}
+```
+
+`id` matches the execution id the phone sent, and `key` is the command label
+from the `[commands]` config table.
+
+> **Batches are subscriber-gated.** `started` and `finished` are always
+> published. `output` batches are published **only while at least one client is
+> subscribed to `runcommand.output`**, so a chatty command does not push four
+> events a second to nobody. A client that wants the transcript without
+> subscribing to every batch can rely on `finished`, which carries the whole
+> (capped) transcript.
+
+> **Caps:** output is bounded to 2000 lines and 1024 characters per line. A
+> batch reports `"truncated": true` once the line cap was hit, and the
+> `finished` transcript is capped separately at 4000 bytes since it is a
+> summary rather than a log.
+
+### 5.15 MPRIS Events
 
 #### `mpris.update`
 

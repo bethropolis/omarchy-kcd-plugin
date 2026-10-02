@@ -40,8 +40,19 @@ function normalizeDevice(entry) {
     lastSeen: String(entry.last_seen !== undefined && entry.last_seen !== null ? entry.last_seen : (entry.lastSeen !== undefined && entry.lastSeen !== null ? entry.lastSeen : (entry.LastSeen || ""))),
     // signal is the daemon's connectivity report ({ signalStrengths: {...} })
     // reduced to a display label, or null when unreported.
-    signal: normalizeSignal(entry.signal !== undefined ? entry.signal : entry.Signal)
+    signal: normalizeSignal(entry.signal !== undefined ? entry.signal : entry.Signal),
+    // SFTP mount state, from the daemon's sftp.mounted / sftp.unmounted
+    // events and the `sftp` block on the summary. The daemon omits the
+    // block entirely when nothing is mounted, so absent means false.
+    storageMounted: isStorageMounted(entry.sftp !== undefined ? entry.sftp : entry.Sftp)
   }
+}
+
+// The `sftp` summary block is { mounted: true, mountPoint: "..." } and is
+// omitted unless a mount is live. Anything else means "not mounted".
+function isStorageMounted(sftp) {
+  if (!sftp || typeof sftp !== "object") return false
+  return sftp.mounted === true
 }
 
 // Normalize an embedded { charge, charging } battery summary (or the
@@ -282,29 +293,6 @@ function unmountCommand(deviceId) {
   return ["kcd", "sftp", "unmount", id]
 }
 
-// Is the phone's storage currently mounted? Read from the kernel mount
-// table (/proc/mounts): the daemon publishes no mount-state event, and
-// `sftp info` carries no such field.
-//
-// Matching is a suffix test on the mountpoint, which kcd always ends with
-// "/kcd-sftp-<device id>", so this works whatever `[sftp] mount_dir` says
-// in the user's kcd.toml. A suffix (not a substring) match keeps
-// "kcd-sftp-<id>-extra" from counting. Only fuse.sshfs counts, so a dead
-// leftover mountpoint directory is never mistaken for a live mount.
-function isSftpMounted(mountsText, deviceId) {
-  var id = String(deviceId || "")
-  if (!isSafeDeviceId(id)) return false
-  var suffix = "/kcd-sftp-" + id
-  var lines = String(mountsText || "").split("\n")
-  for (var i = 0; i < lines.length; i++) {
-    var fields = lines[i].trim().split(/\s+/)
-    // <device> <mountpoint> <fstype> ...
-    if (fields.length < 3) continue
-    if (fields[1].slice(-suffix.length) !== suffix) continue
-    if (fields[2] === "fuse.sshfs") return true
-  }
-  return false
-}
 
 // `kcd share <id> <path>`: single file only, directories rejected by the
 // CLI. The argv contract kcd-share.sh fulfills (it invokes kcd directly);
@@ -421,7 +409,6 @@ if (typeof module !== "undefined") {
     pairCommand: pairCommand,
     unpairCommand: unpairCommand,
     unmountCommand: unmountCommand,
-    isSftpMounted: isSftpMounted,
     shareCommand: shareCommand,
     screenshotShareCommand: screenshotShareCommand,
     stickDevice: stickDevice,

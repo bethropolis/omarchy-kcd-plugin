@@ -415,14 +415,14 @@ if resp["ok"]:
 ipc_request(sock, "contacts_clear", {"deviceId": dev_id})
 ```
 
-### 5.7 Lock/Unlock
+### 5.8 Lock/Unlock
 
 ```python
 ipc_request(sock, "lock", {"deviceId": dev_id})
 ipc_request(sock, "unlock", {"deviceId": dev_id})
 ```
 
-### 5.8 Push Clipboard
+### 5.9 Push Clipboard
 
 ```python
 ipc_request(sock, "clipboard_push", {"deviceId": dev_id})
@@ -430,7 +430,7 @@ ipc_request(sock, "clipboard_push", {"deviceId": dev_id})
 
 The daemon reads the local clipboard (`wl-paste`/`xclip`) and sends it.
 
-### 5.9 Remote Volume Control
+### 5.10 Remote Volume Control
 
 ```python
 # List audio sinks
@@ -454,16 +454,19 @@ Volume changes from the phone arrive as `volume.update` events. The event payloa
 is either `{"name", "volume", "muted"}` for a single sink change or `{"sinks": [...]}`
 for the full sink list.
 
-### 5.10 Get SFTP Connection Info
+### 5.11 Get SFTP Connection Info
 
 ```python
-resp = ipc_request(sock, "sftp_info", {"deviceId": dev_id})
+# The password is omitted unless you ask for it: it is a live credential for
+# the phone's SFTP server. The sftp.mount event always carries it if you need
+# the credentials to mount.
+resp = ipc_request(sock, "sftp_info", {"deviceId": dev_id, "showPassword": True})
 if resp["ok"]:
     info = resp["data"]
     print(f'SSH: {info["user"]}@{info["ip"]} -p {info["port"]}')
 ```
 
-### 5.10 Get Daemon Status
+### 5.12 Get Daemon Status
 
 ```python
 resp = ipc_request(sock, "status")

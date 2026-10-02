@@ -11,13 +11,16 @@
 #   mount succeeded      -> silent, the file manager opened
 #   fuse not permitted   -> critical note with the /etc/fuse.conf fix
 #   sshfs missing        -> critical note with the install command
-#   already mounted      -> critical note with the unmount command
-#   unmount never made   -> critical note saying nothing was mounted
+#   unmount when unmounted -> critical note saying there was nothing mounted
+#   stale mount          -> critical note naming the path that is stuck
 #   anything else        -> critical note with kcd's own output
 #
 # Nothing here escalates privileges: fixes are printed for the user to run,
 # never executed. The device id arrives as an argument and is only ever
 # passed to kcd as one, so no shell interpolation of remote data happens.
+#
+# Mount is idempotent upstream (a repeat call returns the existing mount
+# point), so there is no "already mounted" case to classify here.
 
 set -u
 
@@ -45,8 +48,21 @@ if [[ $mode == unmount ]]; then
   if error=$(kcd sftp unmount "$device_id" 2>&1); then
     exit 0
   fi
-  omarchy-notification-send -g "$GLYPH" -u critical "Could not unmount phone storage" \
-    "${error:-kcd sftp unmount failed}"
+  # kcd distinguishes these itself, so no guessing: "not mounted: no SFTP
+  # mount for device <id>" and "stale SFTP mount at <path> could not be
+  # released, ...".
+  case $error in
+    "not mounted"*)
+      hint="There was nothing mounted to unmount. Mount it first with the Files tile."
+      ;;
+    "stale SFTP mount"*)
+      hint="${error} — unmount it by hand: fusermount3 -u <the path above>"
+      ;;
+    *)
+      hint="${error:-kcd sftp unmount failed}"
+      ;;
+  esac
+  omarchy-notification-send -g "$GLYPH" -u critical "Could not unmount phone storage" "$hint"
   exit 1
 fi
 
@@ -62,8 +78,6 @@ if [[ $output == *user_allow_other* ]]; then
   hint="FUSE needs user_allow_other in /etc/fuse.conf. Run: sudo sed -i 's/^#user_allow_other/user_allow_other/' /etc/fuse.conf"
 elif [[ $output == *"sshfs: not found"* || $output == *"executable file not found"* ]]; then
   hint="sshfs is not installed. Run: sudo pacman -S sshfs"
-elif [[ $output == *"already mounted"* || $output == *"Transport endpoint is not connected"* ]]; then
-  hint="Already mounted, or an earlier mount went stale. Run: kcd sftp unmount $device_id"
 elif [[ $output == *"errorMessage"* || $output == *"storage permission"* ]]; then
   hint="Grant storage permission on the phone, then try again."
 else
