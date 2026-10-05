@@ -49,6 +49,7 @@ Panel {
   readonly property bool pairing: io.pairing
   readonly property string verificationKey: io.verificationKey
   readonly property string pendingPairName: io.pendingPairName
+  readonly property string pendingPairId: io.pendingPairId
   readonly property string pairNotice: io.pairNotice
   readonly property bool startingDaemon: io.startingDaemon
 
@@ -252,6 +253,7 @@ Panel {
             deviceName: root.pendingPairName !== "" ? root.pendingPairName : root.pairedName
             pairing: root.pairing
             verificationKey: root.verificationKey
+            pendingPairId: root.pendingPairId
             pairNotice: root.pairNotice
             startingDaemon: root.startingDaemon
             foreground: root.contentForeground

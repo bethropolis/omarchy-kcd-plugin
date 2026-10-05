@@ -83,3 +83,44 @@ describe("pairing never auto-accepts", () => {
     expect(src).toMatch(/function rejectPendingPair/);
   });
 });
+
+describe("pairing panel states", () => {
+  const unpaired = qml("KcdUnpaired.qml");
+  const panel = qml("Panel.qml");
+  const io = qml("KcdIo.qml");
+
+  it("contains no auto-accept language anywhere near pairing", () => {
+    expect(unpaired).not.toMatch(/pair -y/);
+    expect(unpaired).not.toMatch(/auto-accept/i);
+  });
+
+  it("keys the decision UI off the pending request, not the code", () => {
+    expect(unpaired).toMatch(/property string pendingPairId/);
+    expect(unpaired).toMatch(/hasPending: root\.pendingPairId !== ""/);
+    // A key-less request must still be decidable: no decision element
+    // may gate on verificationKey alone.
+    const gated = [...unpaired.matchAll(/visible: root\.verificationKey !== ""/g)];
+    expect(gated).toEqual([]);
+  });
+
+  it("headlines the request instead of claiming nothing is paired", () => {
+    expect(unpaired).toMatch(/"Phone wants to pair"/);
+    expect(unpaired).toMatch(/"Waiting for your phone"/);
+  });
+
+  it("offers an explicit Stop in both advertising states", () => {
+    expect(unpaired).toMatch(/"Stop"/);
+    expect(unpaired).toMatch(/"Stop pairing"/);
+    // While deciding, the Start/Retry row hides and only Stop remains.
+    expect(unpaired).toMatch(/visible: !root\.hasPending/);
+  });
+
+  it("plumbs pendingPairId from io through the panel", () => {
+    expect(panel).toMatch(/pendingPairId: io\.pendingPairId/);
+    expect(panel).toMatch(/pendingPairId: root\.pendingPairId/);
+  });
+
+  it("clears pending state on rejection, not just the code", () => {
+    expect(io).toMatch(/type === "pair\.rejected"\) \{\s*\n\s*io\.clearPendingPair\(\)/);
+  });
+});

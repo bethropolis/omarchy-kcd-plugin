@@ -5,8 +5,9 @@ import qs.Ui
 // Shown when kcd exists but there is no usable device. Three modes:
 // "down" (daemon not answering), "unpaired" (daemon up, nothing paired)
 // and "offline" (paired phone unreachable, e.g. asleep). One-click
-// pairing runs `kcd pair -y` listen mode; success resolves automatically
-// on pair.accepted. Offline needs no action — reconnect resolves itself.
+// only advertises; a candidate arrives as a request the owner accepts or
+// refuses after comparing the code, and success resolves on pair.accepted.
+// Offline needs no action, reconnect resolves itself.
 Column {
   id: root
 
@@ -21,6 +22,9 @@ Column {
   // Code from the pending pair request, so the phone's code can be
   // compared before anything is trusted. Empty when nothing is pending.
   property string verificationKey: ""
+  // Id of the phone asking to pair. The decision UI keys off this, not the
+  // code: a request without a code can still be refused.
+  property string pendingPairId: ""
   // Why pairing did nothing, when the kcd build is too old to advertise.
   property string pairNotice: ""
   // True while `systemctl --user start kcd` runs (owned by the panel).
@@ -34,6 +38,7 @@ Column {
 
   readonly property bool isDown: root.mode === "down"
   readonly property bool isOffline: root.mode === "offline"
+  readonly property bool hasPending: root.pendingPairId !== ""
 
   width: parent.width
   spacing: Style.space(10)
@@ -52,7 +57,7 @@ Column {
     textFormat: Text.PlainText
     width: parent.width
     horizontalAlignment: Text.AlignHCenter
-    text: root.isDown ? "Daemon not running" : (root.isOffline ? "Phone offline" : "No phone paired")
+    text: root.isDown ? "Daemon not running" : (root.isOffline ? "Phone offline" : (root.hasPending ? "Phone wants to pair" : (root.pairing ? "Waiting for your phone" : "No phone paired")))
     color: root.foreground
     font.family: root.fontFamily
     font.pixelSize: Style.font.title
@@ -69,12 +74,12 @@ Column {
         ? "Starting the daemon… the panel wakes up on its own once it answers."
         : "kcd is installed but the daemon isn't answering. Tap Start daemon below — the panel wakes up on its own."
       : root.isOffline
-        ? root.deviceName + " is paired but not reachable. Wake the phone or open KDE Connect — the panel reconnects on its own."
-        : root.pairing
-          ? (root.verificationKey !== ""
-            ? "Compare the code with your phone, then accept or refuse below. Nothing pairs until you do."
-            : "Advertising for pairing… start the request on your phone. Tap Pairing to stop.")
-          : "No phone is paired yet. Tap Start pairing, then start the request on your phone — you will confirm the code here."
+        ? root.deviceName + " is paired but not reachable. Wake the phone or open KDE Connect - the panel reconnects on its own."
+        : root.hasPending
+          ? "Compare the code with your phone, then accept or refuse below. Nothing pairs until you do."
+          : root.pairing
+            ? "Advertising for pairing... start the request on your phone. Tap Stop to cancel."
+            : "No phone is paired yet. Tap Start pairing, then start the request on your phone - you will confirm the code here."
     color: Qt.darker(root.foreground, 1.4)
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
@@ -95,11 +100,11 @@ Column {
   // A phone is asking to pair. Nothing is trusted yet: show the code so
   // the owner can compare it against the phone, and require a decision.
   Text {
-    visible: root.verificationKey !== ""
+    visible: root.hasPending
     textFormat: Text.PlainText
     width: parent.width
     horizontalAlignment: Text.AlignHCenter
-    text: root.verificationKey === "" ? "" : root.deviceName + " wants to pair"
+    text: root.deviceName + " wants to pair"
     color: root.foreground
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
@@ -107,11 +112,11 @@ Column {
   }
 
   Text {
-    visible: root.verificationKey !== ""
+    visible: root.hasPending
     textFormat: Text.PlainText
     width: parent.width
     horizontalAlignment: Text.AlignHCenter
-    text: root.verificationKey
+    text: root.verificationKey !== "" ? root.verificationKey : "(no code sent)"
     color: Qt.darker(root.foreground, 1.2)
     font.family: root.fontFamily
     font.pixelSize: Style.font.body
@@ -121,7 +126,7 @@ Column {
   // Accept or refuse the candidate. This replaces Start pairing while a
   // request is on screen: the owner decides, never the network.
   Row {
-    visible: root.verificationKey !== ""
+    visible: root.hasPending
     width: parent.width
     spacing: Style.space(10)
 
@@ -148,8 +153,12 @@ Column {
   }
 
   // Primary action first, accented; second is always Retry. Down mode
-  // offers one-click daemon start, unpaired mode one-click pairing.
+  // offers one-click daemon start, unpaired mode one-click pairing, and a
+  // running advertisement offers Stop. While a request waits, the decision
+  // row above owns the choice and this row hides; a full-width Stop below
+  // ends the advertisement without deciding.
   Row {
+    visible: !root.hasPending
     width: parent.width
     spacing: Style.space(10)
 
@@ -157,9 +166,9 @@ Column {
       id: primaryTile
       visible: root.mode !== "offline"
       width: (parent.width - parent.spacing) / 2
-      iconText: root.isDown ? "" : ""
-      label: root.isDown ? (root.startingDaemon ? "Starting…" : "Start daemon") : (root.pairing ? "Pairing…" : "Start pairing")
-      tooltipText: root.isDown ? "Prime the kcd socket — the daemon starts on demand" : (root.pairing ? "Pairing mode on — tap to cancel" : "Listen for pair requests, auto-accept first")
+      iconText: root.isDown ? "" : (root.pairing ? "\uF04D" : "")
+      label: root.isDown ? (root.startingDaemon ? "Starting…" : "Start daemon") : (root.pairing ? "Stop" : "Start pairing")
+      tooltipText: root.isDown ? "Prime the kcd socket - the daemon starts on demand" : (root.pairing ? "Stop advertising for pairing" : "Make this machine discoverable, without accepting anything")
       foreground: root.foreground
       fontFamily: root.fontFamily
       accent: true
@@ -175,6 +184,25 @@ Column {
       foreground: root.foreground
       fontFamily: root.fontFamily
       onTapped: root.retryRequested()
+    }
+  }
+
+  // Full-width Stop while a request waits: ends the advertisement, keeps
+  // the decision row as the only other action. Tapping it clears the
+  // pending display too, since stopping means done with this candidate.
+  Row {
+    visible: root.hasPending
+    width: parent.width
+    spacing: Style.space(10)
+
+    QuickTile {
+      width: parent.width
+      iconText: "\uF04D"
+      label: "Stop pairing"
+      tooltipText: "Stop advertising for pairing"
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onTapped: root.pairRequested()
     }
   }
 }

@@ -297,7 +297,7 @@ QtObject {
       io.stopAdvertising()
       io.applyPairState(event.deviceId, "PAIRED")
     } else if (type === "pair.rejected") {
-      io.verificationKey = ""
+      io.clearPendingPair()
       io.applyPairState(event.deviceId, "UNPAIRED")
     } else if (type === "connectivity.update") {
       io.applySignal(event.deviceId, event.payload)
