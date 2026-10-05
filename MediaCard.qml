@@ -165,7 +165,7 @@ Rectangle {
         Text {
           textFormat: Text.PlainText
           width: parent.width
-          text: card.hasTrack ? card.track.title : ""
+          text: card.hasTrack && card.track ? card.track.title : ""
           color: "white"
           font.family: card.fontFamily
           font.pixelSize: Style.font.body
@@ -176,8 +176,8 @@ Rectangle {
         Text {
           textFormat: Text.PlainText
           width: parent.width
-          visible: card.hasTrack && card.track.artist !== ""
-          text: card.hasTrack ? card.track.artist.toUpperCase() : ""
+          visible: card.hasTrack && !!card.track && card.track.artist !== ""
+          text: card.hasTrack && card.track ? card.track.artist.toUpperCase() : ""
           color: "#cbd5e1"
           font.family: card.fontFamily
           font.pixelSize: Style.font.caption

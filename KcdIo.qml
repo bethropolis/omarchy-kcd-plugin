@@ -51,6 +51,9 @@ QtObject {
   property bool daemonUp: false
   property bool daemonProbed: false
   property bool watchAlive: true
+  // True between a stream dying and the next one starting, so one dead
+  // stream arms backoff once.
+  property bool watchDead: false
   // Set by reconnectWatch() so the death path it triggers restarts at
   // once instead of backing off; cleared on use.
   property bool watchRestartRequested: false
@@ -508,17 +511,23 @@ QtObject {
     }
   }
 
-  // Spawn watchdog: a watch (re)start that yields no line within 10s is a
-  // silent spawn failure (missing binary reports no exit, wedging
-  // running=true with no process and no retry). Force it through the
-  // normal exit path so backoff engages. Disarmed by the first line, so
-  // steady state adds zero timers; every (re)start begins with a daemon
-  // dump, so a quiet-but-live stream still disarms immediately.
+  // Spawn watchdog: a watch (re)start that yields no line in time is a
+  // silent spawn failure (a missing binary reports no exit, wedging
+  // running=true with no process and no retry). Disarmed by the first
+  // line, so steady state adds zero timers.
+//
+// The interval is generous because a cold start goes through socket
+// activation: connecting can block while the daemon comes up, and a 10s
+// window was short enough to trip on a healthy-but-slow start.
+//
+// It flips watchAlive, never `watchProc.running`: that property is bound
+// to installOk && watchAlive, and assigning to it would strip the binding
+// so the backoff restart could never bring the stream back.
   property Timer watchStreamGuard: Timer {
-    interval: 10000
+    interval: 30000
     repeat: false
     onTriggered: {
-      io.watchProc.running = false
+      io.watchAlive = false
       io.noteWatchFailure()
     }
   }
@@ -533,6 +542,11 @@ QtObject {
   // binary is installed. Per-open version probes keep installOk truthful,
   // so a missing binary quiets the loop on the next open.
   function noteWatchFailure() {
+    // Dropping the stream (the guard, or a real exit) can reach this twice
+    // for one dead stream. Only the first call may arm backoff, or the delay
+    // doubles faster than intended. Reset by the stream actually starting.
+    if (io.watchDead) return
+    io.watchDead = true
     io.watchAlive = false
     // A failed watch is proof the daemon isn't answering, so the probe is
     // done even with no CLI one-shot left to say so (otherwise uiState
@@ -586,7 +600,10 @@ QtObject {
       onRead: function(data) { io.noteWatchLine(); io.handleWatchLine(data) }
     }
     onRunningChanged: {
-      if (running) io.watchStreamGuard.restart()
+      if (running) {
+        io.watchDead = false
+        io.watchStreamGuard.restart()
+      }
     }
     onExited: function(exitCode) {
       io.noteWatchFailure()
