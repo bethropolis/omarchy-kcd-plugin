@@ -124,3 +124,17 @@ describe("pairing panel states", () => {
     expect(io).toMatch(/type === "pair\.rejected"\) \{\s*\n\s*io\.clearPendingPair\(\)/);
   });
 });
+
+describe("deliberate bounces never flash the down page", () => {
+  const src = qml("KcdIo.qml");
+  const body = src.slice(src.indexOf("function noteWatchFailure()"));
+
+  it("restarts a requested bounce before touching daemon state", () => {
+    const bounce = body.indexOf("io.watchRestartRequested");
+    const down = body.indexOf("io.daemonUp = false");
+    expect(bounce).toBeGreaterThan(-1);
+    expect(down).toBeGreaterThan(-1);
+    expect(bounce).toBeLessThan(down);
+    expect(body.slice(bounce, down)).toMatch(/return/);
+  });
+});

@@ -619,18 +619,21 @@ QtObject {
     if (io.watchDead) return
     io.watchDead = true
     io.watchAlive = false
+    if (io.watchRestartRequested) {
+      // Deliberate bounce from reconnectWatch() (panel open, Retry, pair
+      // exit): straight back up with the UI untouched. Marking the daemon
+      // down here painted the down page on every healthy open until the
+      // next snapshot landed, a flash under fast clicking.
+      io.watchRestartRequested = false
+      io.watchAlive = true
+      return
+    }
     // A failed watch is proof the daemon isn't answering, so the probe is
     // done even with no CLI one-shot left to say so (otherwise uiState
     // would sit in "ready" forever with a dead daemon).
     io.daemonProbed = true
     io.daemonUp = false
     if (!io.installOk) return
-    if (io.watchRestartRequested) {
-      // Deliberate bounce from reconnectWatch(): straight back up, no backoff.
-      io.watchRestartRequested = false
-      io.watchAlive = true
-      return
-    }
     io.daemonText = "kcd — reconnecting…"
     io.watchBackoffMs = Math.min(io.watchBackoffMs * 2, 30000)
     io.watchRestartTimer.restart()
