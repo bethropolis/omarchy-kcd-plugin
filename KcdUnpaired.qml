@@ -11,20 +11,26 @@ Column {
   id: root
 
   property string mode: "down"
-  // Paired phone name, used by the offline copy.
+  // Phone name: the paired device in offline mode, or the candidate
+  // asking to pair.
   property string deviceName: "phone"
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  // True while `kcd pair -y` listen mode runs (owned by the panel).
+  // True while `kcd pair --advertise-only` runs (owned by the panel).
   property bool pairing: false
-  // Key from the last pair.requested, so the phone's code can be compared.
+  // Code from the pending pair request, so the phone's code can be
+  // compared before anything is trusted. Empty when nothing is pending.
   property string verificationKey: ""
+  // Why pairing did nothing, when the kcd build is too old to advertise.
+  property string pairNotice: ""
   // True while `systemctl --user start kcd` runs (owned by the panel).
   property bool startingDaemon: false
 
   signal retryRequested()
   signal pairRequested()
   signal daemonStartRequested()
+  signal acceptPairRequested()
+  signal rejectPairRequested()
 
   readonly property bool isDown: root.mode === "down"
   readonly property bool isOffline: root.mode === "offline"
@@ -65,23 +71,80 @@ Column {
       : root.isOffline
         ? root.deviceName + " is paired but not reachable. Wake the phone or open KDE Connect — the panel reconnects on its own."
         : root.pairing
-          ? "Listening for pair requests… accept the prompt on your phone and it connects on its own. Tap Pairing to cancel."
-          : "No phone is paired yet. Tap Start pairing, then accept the request on your phone — it connects on its own."
+          ? (root.verificationKey !== ""
+            ? "Compare the code with your phone, then accept or refuse below. Nothing pairs until you do."
+            : "Advertising for pairing… start the request on your phone. Tap Pairing to stop.")
+          : "No phone is paired yet. Tap Start pairing, then start the request on your phone — you will confirm the code here."
     color: Qt.darker(root.foreground, 1.4)
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
   }
 
-  // Shown only when a request actually arrived: compare with the phone.
+  Text {
+    visible: root.pairNotice !== ""
+    textFormat: Text.PlainText
+    width: parent.width
+    horizontalAlignment: Text.AlignHCenter
+    wrapMode: Text.WordWrap
+    text: root.pairNotice
+    color: Qt.darker(root.foreground, 1.5)
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.bodySmall
+  }
+
+  // A phone is asking to pair. Nothing is trusted yet: show the code so
+  // the owner can compare it against the phone, and require a decision.
   Text {
     visible: root.verificationKey !== ""
     textFormat: Text.PlainText
     width: parent.width
     horizontalAlignment: Text.AlignHCenter
-    text: "Verification key\n" + root.verificationKey
-    color: Qt.darker(root.foreground, 1.4)
+    text: root.verificationKey === "" ? "" : root.deviceName + " wants to pair"
+    color: root.foreground
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
+    font.bold: true
+  }
+
+  Text {
+    visible: root.verificationKey !== ""
+    textFormat: Text.PlainText
+    width: parent.width
+    horizontalAlignment: Text.AlignHCenter
+    text: root.verificationKey
+    color: Qt.darker(root.foreground, 1.2)
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.body
+    font.bold: true
+  }
+
+  // Accept or refuse the candidate. This replaces Start pairing while a
+  // request is on screen: the owner decides, never the network.
+  Row {
+    visible: root.verificationKey !== ""
+    width: parent.width
+    spacing: Style.space(10)
+
+    QuickTile {
+      width: (parent.width - parent.spacing) / 2
+      iconText: "\uF00C"
+      label: "Accept"
+      tooltipText: "Pair with " + root.deviceName + " — only if the codes match"
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      accent: true
+      onTapped: root.acceptPairRequested()
+    }
+
+    QuickTile {
+      width: (parent.width - parent.spacing) / 2
+      iconText: "\uF00D"
+      label: "Refuse"
+      tooltipText: "Send a rejection to " + root.deviceName
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onTapped: root.rejectPairRequested()
+    }
   }
 
   // Primary action first, accented; second is always Retry. Down mode

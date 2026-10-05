@@ -46,6 +46,22 @@ QtObject {
   property bool versionOk: false
   // Verification key from the last pair.requested, shown while pairing.
   property string verificationKey: ""
+  // The candidate awaiting the owner's decision. Held until accepted or
+  // refused, so the code on screen always belongs to a real request.
+  property string pendingPairId: ""
+  property string pendingPairName: ""
+  // True once the daemon confirms it is discoverable for pairing. The
+  // process starting is not proof; kcd prints the transition.
+  property bool advertising: false
+  // Set once advertising has actually been confirmed, so an exit before
+  // that means the build is too old for --advertise-only rather than the
+  // owner cancelling.
+  property bool pairAdvertised: false
+  // Set when we stop the process ourselves, so a deliberate cancel is not
+  // mistaken for a failure.
+  property bool pairStopping: false
+  // Shown instead of silently doing nothing on a kcd without the flag.
+  property string pairNotice: ""
   property bool installOk: false
   property bool installProbed: false
   property bool daemonUp: false
@@ -63,8 +79,9 @@ QtObject {
   // sftp.mounted / sftp.unmounted events.
   readonly property bool storageMounted: autoDevice ? autoDevice.storageMounted === true : false
   property double ioStartMs: 0
-  // Pairing listen mode (`kcd pair -y`): true while pairProc runs.
-  // Auto-accepts the first incoming request then exits on its own.
+  // Pairing advertisement (`kcd pair --advertise-only`): true while the
+  // process runs. `advertising` is the stronger signal: it turns true only
+  // once kcd confirms the daemon is discoverable.
   readonly property bool pairing: pairProc.running
   // Daemon start (`systemctl --user start kcd`): true while daemonProc runs.
   readonly property bool startingDaemon: daemonProc.running
@@ -145,20 +162,38 @@ QtObject {
     io.watchAlive = false
   }
 
-  // Pairing from a click: start `kcd pair -y` listen mode, or cancel a
-  // running one. Needs the daemon (pairing goes over IPC); otherwise just
-  // re-probe. Pair success arrives via the pair.accepted watch event.
+  // Start pairing from a click: advertise, or cancel an advertisement in
+  // progress. No device id, and nothing is accepted implicitly -- candidates
+  // arrive as pair.requested events and wait for the owner.
   function togglePairing() {
     if (pairProc.running) {
-      pairProc.running = false
+      io.stopAdvertising()
       return
     }
     if (!io.installOk || !io.daemonUp) {
       io.refresh()
       return
     }
+    io.pairAdvertised = false
+    io.pairStopping = false
+    io.pairNotice = ""
     pairProc.command = Kcd.pairCommand()
     pairProc.running = true
+  }
+
+  function stopAdvertising() {
+    if (pairProc.running) io.pairStopping = true
+    if (pairProc.running) pairProc.running = false
+    io.advertising = false
+  }
+
+  // {"advertising":true|false} is the only proof the daemon is actually
+  // discoverable; ignore anything else the CLI prints.
+  function onAdvertiseOutput(text) {
+    var state = Kcd.parseAdvertiseOutput(text)
+    if (state === null) return
+    io.advertising = state
+    if (state === true) io.pairAdvertised = true
   }
 
   // One-click daemon start: primes `kcd.socket` (kcd >= 1.18 ships the
@@ -256,9 +291,10 @@ QtObject {
     } else if (type === "device.removed") {
       io.handleDeviceRemoved(event.deviceId)
     } else if (type === "pair.requested") {
-      io.verificationKey = String((event.payload || {}).verificationKey || "")
+      io.handlePairRequested(event.deviceId, event.payload)
     } else if (type === "pair.accepted") {
-      io.verificationKey = ""
+      io.clearPendingPair()
+      io.stopAdvertising()
       io.applyPairState(event.deviceId, "PAIRED")
     } else if (type === "pair.rejected") {
       io.verificationKey = ""
@@ -341,6 +377,41 @@ QtObject {
       updated.push(d)
     }
     if (found) io.devices = updated
+  }
+
+    // A phone asked to pair while we were advertising. Nothing is trusted
+  // yet: hold the candidate and its code so the owner can compare, and
+  // wait for an explicit accept or refuse.
+  function handlePairRequested(id, payload) {
+    if (!id || !Kcd.isSafeDeviceId(id)) return
+    var p = payload || {}
+    io.pendingPairId = String(id)
+    io.pendingPairName = String(p.name || id)
+    io.verificationKey = String(p.verificationKey || "")
+  }
+
+  function clearPendingPair() {
+    io.pendingPairId = ""
+    io.pendingPairName = ""
+    io.verificationKey = ""
+  }
+
+  // Owner confirmed the code: accept exactly that device. Any other
+  // candidate still has to be accepted on its own.
+  function acceptPendingPair() {
+    if (io.pendingPairId === "") return
+    var cmd = Kcd.acceptPairCommand(io.pendingPairId)
+    if (!cmd) return
+    Quickshell.execDetached(cmd)
+  }
+
+  // Owner refused, or the request went stale: send the rejection so the
+  // phone stops offering, then keep advertising for the real device.
+  function rejectPendingPair() {
+    if (io.pendingPairId === "") return
+    var cmd = Kcd.rejectPairCommand(io.pendingPairId)
+    if (cmd) Quickshell.execDetached(cmd)
+    io.clearPendingPair()
   }
 
   function applyPairState(id, state) {
@@ -516,13 +587,13 @@ QtObject {
   // running=true with no process and no retry). Disarmed by the first
   // line, so steady state adds zero timers.
 //
-// The interval is generous because a cold start goes through socket
-// activation: connecting can block while the daemon comes up, and a 10s
-// window was short enough to trip on a healthy-but-slow start.
-//
-// It flips watchAlive, never `watchProc.running`: that property is bound
-// to installOk && watchAlive, and assigning to it would strip the binding
-// so the backoff restart could never bring the stream back.
+  // The interval is generous because a cold start goes through socket
+  // activation: connecting can block while the daemon comes up, and a 10s
+  // window was short enough to trip on a healthy-but-slow start.
+  //
+  // It flips watchAlive, never `watchProc.running`: that property is bound
+  // to installOk && watchAlive, and assigning to it would strip the binding
+  // so the backoff restart could never bring the stream back.
   property Timer watchStreamGuard: Timer {
     interval: 30000
     repeat: false
@@ -630,12 +701,26 @@ QtObject {
     }
   }
 
-  // Managed `kcd pair -y`: exits on its own after auto-accepting (or on
-  // daemon error); survives panel close, dies with the shell. onExited
-  // re-probes so a cancel/timeout returns the panel to current truth.
+  // Managed `kcd pair --advertise-only --json`: makes the daemon
+  // discoverable and accepts nothing. Captured (not detached) because the
+  // process is the advertisement's lifetime -- the owner cancels it, and a
+  // successful pair must stop it -- and because `advertising` is only true
+  // once kcd confirms the transition rather than merely started.
   property Process pairProc: Process {
     running: false
+    stdout: SplitParser {
+      onRead: function(data) { io.onAdvertiseOutput(data) }
+    }
     onExited: function(exitCode) {
+      io.advertising = false
+      // Never confirmed advertising and we did not ask it to stop: this
+      // build has no --advertise-only, so say so instead of appearing to
+      // do nothing.
+      if (!io.pairAdvertised && !io.pairStopping) {
+        io.pairNotice = "This kcd build cannot advertise for pairing. Update it, or pair from a terminal: kcd pair"
+      }
+      io.pairStopping = false
+      io.clearPendingPair()
       io.refresh()
     }
   }

@@ -48,11 +48,15 @@ Panel {
   readonly property string uiState: io.uiState
   readonly property bool pairing: io.pairing
   readonly property string verificationKey: io.verificationKey
+  readonly property string pendingPairName: io.pendingPairName
+  readonly property string pairNotice: io.pairNotice
   readonly property bool startingDaemon: io.startingDaemon
 
   // Thin wrappers — functions can't alias.
   function refresh() { io.refresh() }
   function togglePairing() { io.togglePairing() }
+  function acceptPendingPair() { io.acceptPendingPair() }
+  function rejectPendingPair() { io.rejectPendingPair() }
   function startDaemon() { io.startDaemon() }
   function runTile(tile) { io.runTile(tile) }
   function mediaAction(action) { io.mediaAction(action) }
@@ -243,15 +247,20 @@ Panel {
           KcdUnpaired {
             visible: root.uiState === "down" || root.uiState === "unpaired" || root.uiState === "offline"
             mode: root.uiState === "down" ? "down" : (root.uiState === "offline" ? "offline" : "unpaired")
-            deviceName: root.pairedName
+            // The candidate asking to pair when there is one, else the
+            // paired phone the offline copy talks about.
+            deviceName: root.pendingPairName !== "" ? root.pendingPairName : root.pairedName
             pairing: root.pairing
             verificationKey: root.verificationKey
+            pairNotice: root.pairNotice
             startingDaemon: root.startingDaemon
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
             onRetryRequested: root.refresh()
             onPairRequested: root.togglePairing()
             onDaemonStartRequested: root.startDaemon()
+            onAcceptPairRequested: root.acceptPendingPair()
+            onRejectPairRequested: root.rejectPendingPair()
           }
 
           // ---- 4. Footer (live engine version, manifest fallback)

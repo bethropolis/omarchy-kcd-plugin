@@ -64,3 +64,22 @@ describe("media card null-safety", () => {
     expect(derefs).toEqual([]);
   });
 });
+describe("pairing never auto-accepts", () => {
+  const src = qml("KcdIo.qml");
+
+  it("does not spawn `kcd pair -y` or `--yes` anywhere", () => {
+    // The marketplace security review flagged this exact shape: the first
+    // device to ask on the LAN becomes trusted before the owner ever sees
+    // a code. Advertising plus a per-device accept is the replacement.
+    expect(src).not.toMatch(/pair["',\s]+-y/);
+    expect(src).not.toMatch(/--yes/);
+    expect(src).toMatch(/--advertise-only/);
+  });
+
+  it("routes every pair.requested through the owner-decision handler", () => {
+    expect(src).toMatch(/type === "pair\.requested"\) \{\s*\n\s*io\.handlePairRequested\(/);
+    expect(src).toMatch(/function handlePairRequested/);
+    expect(src).toMatch(/function acceptPendingPair/);
+    expect(src).toMatch(/function rejectPendingPair/);
+  });
+});

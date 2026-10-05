@@ -236,7 +236,31 @@ describe("command builders", () => {
   it("mprisCommand and pairCommand", () => {
     expect(Kcd.mprisCommand("next", "d")).toEqual(["kcd", "mpris", "next", "--device", "d"]);
     expect(Kcd.mprisCommand("next", "")).toEqual(["kcd", "mpris", "next"]);
-    expect(Kcd.pairCommand()).toEqual(["kcd", "pair", "-y"]);
+  });
+
+  it("pairCommand advertises without accepting anything", () => {
+    expect(Kcd.pairCommand()).toEqual(["kcd", "pair", "--advertise-only", "--json"]);
+    // Auto-accept must never come back: it trusts whoever asks first on
+    // the local network, with no code shown to the owner.
+    expect(Kcd.pairCommand()).not.toContain("-y");
+    expect(Kcd.pairCommand().join(" ")).not.toMatch(/--yes/);
+  });
+
+  it("accept and reject are per-device and id-guarded", () => {
+    expect(Kcd.acceptPairCommand("9a5c23ea_7195")).toEqual(["kcd", "pair", "9a5c23ea_7195"]);
+    expect(Kcd.rejectPairCommand("9a5c23ea_7195")).toEqual(["kcd", "unpair", "9a5c23ea_7195"]);
+    for (const bad of ["", null, "x'; id; echo '"]) {
+      expect(Kcd.acceptPairCommand(bad)).toBeNull();
+      expect(Kcd.rejectPairCommand(bad)).toBeNull();
+    }
+  });
+
+  it("parseAdvertiseOutput reads only the advertising transitions", () => {
+    expect(Kcd.parseAdvertiseOutput('{"advertising":true}')).toBe(true);
+    expect(Kcd.parseAdvertiseOutput('{"advertising":false}')).toBe(false);
+    expect(Kcd.parseAdvertiseOutput("")).toBeNull();
+    expect(Kcd.parseAdvertiseOutput("not json")).toBeNull();
+    expect(Kcd.parseAdvertiseOutput('{"other":true}')).toBeNull();
   });
 
   it("unpairCommand builds argv and guards the device id", () => {

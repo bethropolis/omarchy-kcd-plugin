@@ -266,12 +266,46 @@ function mprisCommand(action, deviceId) {
   return cmd
 }
 
-// `kcd pair -y` listen mode: enables pairing mode on the daemon and
-// auto-accepts the first incoming request, then exits on its own.
-// Run managed (not detached) so the panel can show pairing state and
-// cancel it; no device id — requests can come from any phone.
+// `kcd pair --advertise-only --json`: make the daemon discoverable for
+// pairing and accept nothing. The client learns about candidates from the
+// `pair.requested` event on its existing watch stream, so the owner can
+// compare the verification code before anything is trusted. Acceptance
+// stays an explicit per-device step (acceptPairCommand).
 function pairCommand() {
-  return ["kcd", "pair", "-y"]
+  return ["kcd", "pair", "--advertise-only", "--json"]
+}
+
+// Accept one specific pending request. Rejects nothing implicitly: the id is
+// the device the owner confirmed.
+function acceptPairCommand(deviceId) {
+  var id = String(deviceId || "")
+  if (!isSafeDeviceId(id)) return null
+  return ["kcd", "pair", id]
+}
+
+// Refuse a pending request. kcd documents `unpair` as the reject path for a
+// candidate reported by pair_listen.
+function rejectPairCommand(deviceId) {
+  var id = String(deviceId || "")
+  if (!isSafeDeviceId(id)) return null
+  return ["kcd", "unpair", id]
+}
+
+// Parse one line of `kcd pair --advertise-only --json`.
+// Returns true/false for the advertising transitions, null for anything else.
+function parseAdvertiseOutput(text) {
+  var raw = String(text || "").trim()
+  if (raw === "") return null
+  var parsed = null
+  try {
+    parsed = JSON.parse(raw)
+  } catch (e) {
+    return null
+  }
+  if (!parsed || typeof parsed !== "object") return null
+  if (parsed.advertising === true) return true
+  if (parsed.advertising === false) return false
+  return null
 }
 
 // `kcd unpair <id>`: sends a rejection packet and drops the device from
@@ -412,6 +446,9 @@ if (typeof module !== "undefined") {
     isSafeDeviceId: isSafeDeviceId,
     configTomlPath: configTomlPath,
     pairCommand: pairCommand,
+    acceptPairCommand: acceptPairCommand,
+    rejectPairCommand: rejectPairCommand,
+    parseAdvertiseOutput: parseAdvertiseOutput,
     unpairCommand: unpairCommand,
     mountCommand: mountCommand,
     unmountCommand: unmountCommand,
