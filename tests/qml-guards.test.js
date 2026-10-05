@@ -138,3 +138,22 @@ describe("deliberate bounces never flash the down page", () => {
     expect(body.slice(bounce, down)).toMatch(/return/);
   });
 });
+
+describe("downProbeTimer never runs when closed", () => {
+  const src = qml("KcdIo.qml");
+  const m = src.match(/property Timer downProbeTimer: Timer \{([\s\S]*?)\n  \}/);
+
+  it("exists with a panelOpen-first running binding", () => {
+    expect(m).not.toBeNull();
+    // panelOpen must be the first conjunct: closed stops the timer by
+    // binding, regardless of what follows.
+    expect(m[1]).toMatch(/running: io\.panelOpen &&/);
+  });
+
+  it("fires only in the missing/down states", () => {
+    expect(m[1]).toMatch(/uiState === "missing"/);
+    expect(m[1]).toMatch(/uiState === "down"/);
+    expect(m[1]).toMatch(/repeat: true/);
+    expect(m[1]).toMatch(/io\.refresh\(\)/);
+  });
+});

@@ -574,6 +574,19 @@ QtObject {
     }
   }
 
+  // Self-heal while open: a missing binary or a silent daemon is
+  // re-probed every 10s, so reinstalls and outages recover without a tap.
+  // The closed-panel guarantee is the `running` binding, not discipline:
+  // panelOpen false stops the timer, and so does leaving missing/down.
+  property Timer downProbeTimer: Timer {
+    interval: 10000
+    repeat: true
+    running: io.panelOpen && (io.uiState === "missing" || io.uiState === "down")
+    onTriggered: {
+      io.refresh()
+    }
+  }
+
   property Timer watchRestartTimer: Timer {
     interval: io.watchBackoffMs
     repeat: false
@@ -657,11 +670,11 @@ QtObject {
   }
 
 
-  // Panel-open and retry-tap refreshes, intake top-ups, and the watch
-  // lifecycle (plus its spawn guard) are the only re-probe paths:
-  // installing kcd is picked up on the next open or retry, and the
-  // daemon's return arrives as a watch snapshot. No background timer —
-  // an unhealthy plugin spawns nothing while the panel is closed.
+  // Panel-open and retry-tap refreshes, downProbeTimer below, intake
+  // top-ups, and the watch lifecycle (plus its spawn guard) are the only
+  // re-probe paths: installing kcd is picked up on the next open, retry,
+  // or probe tick, and the daemon's return arrives as a watch snapshot.
+  // No timer runs while the panel is closed.
 
   // The plugin's only live channel: the daemon pushes a full state
   // snapshot on connect and every later change as an event, so no CLI
