@@ -5,9 +5,6 @@ with the `kcd` daemon through its Unix socket IPC interface. The daemon is
 headless — there is no built-in GUI. Everything a client can do goes through
 the IPC protocol documented in [`IPC_PROTOCOL.md`](IPC_PROTOCOL.md).
 
-If you are building a Rust/GTK4 client, see the separate reference documents
-in [`../../rust/kcd-client/`](../../rust/kcd-client/) (`PROJECT_GUIDE.md`,
-`AGENT.md`, `ROADMAP.md`).
 
 ---
 
@@ -27,7 +24,6 @@ owning user only). The directory `kcd/` is created inside the runtime dir.
 
 ```python
 import os
-import pwd
 
 def socket_path():
     uid = os.getuid()
@@ -154,6 +150,24 @@ if resp["ok"]:
 > Your client must ask the user and then call `pair` (accept) or `unpair`
 > (reject), mirroring `kcd pair` / `kcd pair --yes`.
 
+### Do not shell out to `kcd pair -y`
+
+`kcd pair -y` accepts the first device that asks, from any device on the local
+network. That is the right behaviour for a headless server and the wrong one for
+a panel, bar or launcher — and it is what a client reaches for when it has no
+TTY to prompt on.
+
+Two better shapes, both of which keep the owner in the decision:
+
+**Poll `pair_listen` in a thread** (above). It is report-only and has no prompt,
+so it suits a client that does not already subscribe to the event stream.
+
+**Observe `pair.requested` instead** if you already run a `watch` stream — the
+pair plugin publishes it with the verification key, so no second listener is
+needed. `kcd pair --advertise-only` exists to open the advertisement window
+without any acceptance path; drive it as a supervised child and stop it on
+shutdown.
+
 ### 3.3 Unpairing
 
 ```python
@@ -183,63 +197,47 @@ class KcdWatcher:
     def on(self, event_type, callback):
         self._callbacks.setdefault(event_type, []).append(callback)
 
-    def _read_line(self, sock):
-        buf = b""
-        while True:
-            c = sock.recv(1)
-            if c == b"\n" or not c:
-                break
-            buf += c
-        return buf.decode()
-
-    def start(self):
-        self._running = True
-        thread = threading.Thread(target=self._run, daemon=True)
-        thread.start()
-
-    def stop(self):
-        self._running = False
-
     def _run(self):
         import time
         backoff = 1
+        sock = None
         while self._running:
             try:
                 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                sock.settimeout(30)
                 sock.connect(self.socket_path)
 
-                payload = None
-                if self.event_types:
-                    payload = {"events": self.event_types}
                 req = {"cmd": "watch"}
-                if payload:
-                    req["payload"] = payload
+                if self.event_types:
+                    req["payload"] = {"events": self.event_types}
                 sock.sendall((json.dumps(req) + "\n").encode())
 
-                # Consume the ack line
-                ack = self._read_line(sock)
+                # Consume the ack line. A rejection goes through the
+                # backoff path like any other failure — a bare continue
+                # here would reconnect in a hot loop.
+                stream = sock.makefile("r")
+                ack = stream.readline()
                 if not json.loads(ack).get("ok"):
-                    continue
+                    raise ConnectionError(f"watch rejected: {ack.strip()}")
 
                 backoff = 1  # Reset on successful connect
-                while self._running:
-                    line = self._read_line(sock)
-                    if not line:
+                for line in stream:
+                    if not self._running:
                         break
                     event = json.loads(line)
                     etype = event.get("type")
                     if etype in self._callbacks:
                         for cb in self._callbacks[etype]:
-                            cb(event["deviceId"], event.get("payload"))
+                            cb(event.get("deviceId"), event.get("payload"))
 
             except (socket.error, json.JSONDecodeError, ConnectionError) as e:
                 print(f"Watch error: {e}")
             finally:
                 try:
-                    sock.close()
+                    if sock is not None:
+                        sock.close()
                 except Exception:
                     pass
+                sock = None
 
             # Exponential backoff 1s → 30s
             if self._running:
@@ -290,6 +288,12 @@ except KeyboardInterrupt:
 | `share.complete` | File transfer finished |
 | `mpris.update` | Now-playing state changed (deduplicated — only on real changes) |
 | `sms.incoming` | SMS/MMS received |
+| `contacts.updated` | Contacts sync progress (counts only; call `contacts_list` for data) |
+| `pair.requested` | Remote device wants to pair |
+| `ping.received` | Ping from device |
+| `connectivity.update` | Network type or signal strength changed |
+| `volume.update` | Remote sink volume or mute changed |
+| `sftp.mount` | SFTP credentials received — mount with them, never log them |
 
 > **SMS freshness:** the phone only pushes new messages after the daemon
 > has asked once, which by default happens only while a client subscribes to
@@ -300,9 +304,6 @@ except KeyboardInterrupt:
 > daemon keeps publishing events in that case but stays quiet on desktop
 > notifications. Messages that predate the ask arrive as a one-off burst of
 > per-thread history and are not notified.
-| `contacts.updated` | Contacts sync progress (counts only; call `contacts_list` for data) |
-| `pair.requested` | Remote device wants to pair |
-| `ping.received` | Ping from device |
 
 > **Freshness:** while at least one client watches `mpris.update`, the
 > daemon runs a 5-second ticker that re-requests now-playing from devices
@@ -366,7 +367,7 @@ The phone should vibrate/show a notification.
 ### 5.3 Share a File
 
 ```python
-ipc_request(sock, "share", {"deviceId": dev_id, "file": "/path/to/file.pdf"})
+ipc_request(sock, "share", {"deviceId": dev_id, "filePath": "/path/to/file.pdf"})
 ```
 
 ### 5.4 MPRIS Control
@@ -378,8 +379,9 @@ ipc_request(sock, "mpris_action", {"deviceId": dev_id, "action": "playpause"})
 # Next track
 ipc_request(sock, "mpris_action", {"deviceId": dev_id, "action": "next"})
 
-# Set volume
-ipc_request(sock, "mpris_action", {"deviceId": dev_id, "action": "setVolume", "value": 50})
+# Set volume. Volume is its own field, not an action — the payload has no
+# "value" key, so {"action": "setVolume"} sends nothing and still returns ok.
+ipc_request(sock, "mpris_action", {"deviceId": dev_id, "volume": 50})
 ```
 
 ### 5.5 Send SMS
@@ -396,7 +398,6 @@ ipc_request(sock, "send_sms", {
 
 ```python
 ipc_request(sock, "findmyphone", {"deviceId": dev_id})
-# or: ipc_request(sock, "ring", {"deviceId": dev_id})
 ```
 
 ### 5.7 Sync Contacts
@@ -587,15 +588,19 @@ def on_complete(dev_id, payload):
 Subscribe to all `notification` events and build an inbox:
 
 ```python
+import time
+
 inbox = []
 
 @w.on("notification")
 def on_notification(dev_id, payload):
     inbox.append({
+        "id": payload.get("id"),
         "app": payload["appName"],
         "title": payload["title"],
         "text": payload["text"],
-        "time": import_time.time(),
+        "time": time.time(),
+        "request_reply_id": payload.get("requestReplyId"),
         "can_reply": "requestReplyId" in payload
     })
     # Keep last 50
@@ -603,14 +608,14 @@ def on_notification(dev_id, payload):
         inbox.pop(0)
 
 def reply_to_notification(dev_id, notif_id, message):
-    ipc_request(command_sock, "notify_reply", {
+    ipc_request(sock, "notify_reply", {
         "deviceId": dev_id,
         "replyId": notif_id,
         "message": message
     })
 
 def dismiss_notification(dev_id, notif_id):
-    ipc_request(command_sock, "notify_dismiss", {
+    ipc_request(sock, "notify_dismiss", {
         "deviceId": dev_id,
         "notificationId": notif_id
     })
@@ -634,7 +639,7 @@ def on_sms(dev_id, payload):
     })
 
 def send_sms(dev_id, phone_number, message):
-    ipc_request(command_sock, "send_sms", {
+    ipc_request(sock, "send_sms", {
         "deviceId": dev_id,
         "phoneNumber": phone_number,
         "message": message
@@ -649,12 +654,6 @@ class MediaController:
         self.sock = sock
         self.dev_id = dev_id
         self.now_playing = None
-
-    def refresh(self):
-        resp = ipc_request(self.sock, "mpris_action", {
-            "deviceId": self.dev_id,
-            "action": "playpause"  # triggers state push
-        })
 
     def play_pause(self):
         ipc_request(self.sock, "mpris_action", {
@@ -672,8 +671,21 @@ class MediaController:
         })
 
     def set_volume(self, vol):
+        # Volume is a separate payload field. "setVolume" is not an action.
         ipc_request(self.sock, "mpris_action", {
-            "deviceId": self.dev_id, "action": "setVolume", "value": vol
+            "deviceId": self.dev_id, "volume": vol
+        })
+
+    def seek_relative(self, delta_ms):
+        # Needs a tracked position; errors otherwise. Phones ignore "seek".
+        return ipc_request(self.sock, "mpris_action", {
+            "deviceId": self.dev_id, "seek": delta_ms
+        })
+
+    def seek_absolute(self, pos_ms):
+        # Always works: the phone already knows where it is.
+        return ipc_request(self.sock, "mpris_action", {
+            "deviceId": self.dev_id, "setPosition": pos_ms
         })
 ```
 
@@ -737,9 +749,9 @@ simple waybar custom module:
 #!/bin/bash
 # ~/.config/waybar/scripts/kcd-custom.sh
 while true; do
-    socat - UNIX-CONNECT:/run/user/$(id -u)/kcd/kcd.sock <<'EOF' | while read -r line; do
-{"cmd":"watch","payload":{"events":["battery.update","mpris.update"]}}
-EOF
+    # The sleep keeps stdin open: at end of input socat would close the stream.
+    (echo '{"cmd":"watch","payload":{"events":["battery.update","mpris.update"]}}'; sleep infinity) \
+        | socat - UNIX-CONNECT:/run/user/$(id -u)/kcd/kcd.sock | while read -r line; do
         [ "$line" = '{"ok":true}' ] && continue
         echo "$line" | jq -c 'select(.type=="battery.update") | {text: ("🔋 \(.payload.charge)%")}'
     done
@@ -765,7 +777,7 @@ def main():
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.connect(SOCK)
     sock.sendall(b'{"cmd":"watch","payload":{"events":' +
-                 sys.argv[1:].encode() + b'}}\n')
+                 sys.argv[1].encode() + b'}}\n')
     # Discard ack
     ack = sock.makefile("r").readline()
     for line in sock.makefile("r"):
@@ -778,7 +790,7 @@ if __name__ == "__main__":
 
 Usage: `python3 monitor.py '["battery.update","mpris.update"]'`
 
-### 9.3 GTK4/Shell Proxy
+### 9.3 Shell Widgets (eww, ags, quickshell)
 
 The plain-text output of `kcd watch` is formatted for people, not for parsing:
 long values are truncated, zero counts are dropped, and the wording is prose
@@ -791,7 +803,7 @@ background and pipe the JSON output to a named pipe or parse it directly:
 
 ```bash
 # In the shell widget's startup:
-kcd watch --json '["battery.update","mpris.update"]' | while read -r line; do
+kcd watch --json --events battery.update --events mpris.update | while read -r line; do
     [ "$line" = '{"ok":true}' ] && continue
     # Parse and update widget state
 done
@@ -809,23 +821,14 @@ kcd watch --events=connectivity.update
 
 ## 10. Going Further
 
-### Rust/GTK4 Client
-
-A reference Rust GTK4 client implementation is being developed separately at
-[`../../rust/kcd-client/`](../../rust/kcd-client/). Its `PROJECT_GUIDE.md`,
-`AGENT.md`, and `ROADMAP.md` documents provide additional architectural
-context for building a full-featured GUI client.
-
 ### Protocol-Level Implementation
 
 If you are implementing a full KDE Connect network-level client (not just IPC),
 refer to the upstream protocol spec at
-<https://valent.andyholmes.ca/documentation/protocol.html>.
+<https://github.com/KDE/kdeconnect-meta/blob/work/protocol-schemas/protocol.md>.
 
 ### Getting Help
-
-- **Daemon issues:** `/home/bet/Projects/go/kde-connect` — open a GitHub
-  issue.
+- **Ask questions or Issues**: feel free to ask questions in kcd discussion page  or file an issue that you may find, also if something can better be done upstream than in client do a feature request through issues
 - **Protocol questions:** The IPC protocol reference in
   [`IPC_PROTOCOL.md`](IPC_PROTOCOL.md) is the source of truth.
 - **API stability:** The IPC protocol is considered stable within a major

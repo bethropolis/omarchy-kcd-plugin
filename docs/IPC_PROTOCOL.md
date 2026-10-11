@@ -119,9 +119,10 @@ Optional fields:
 {"deviceId": "a1b2c3d4e5f6_...", "accept": true, "reject": false}
 ```
 
-- If neither `accept` nor `reject` is set, sends a pair request to the device.
-- If `accept: true`, accepts an incoming pair request from the device.
-- If `reject: true`, rejects or unpairs.
+- Without `reject`, accepts the device's pending request (state
+  `PAIR_REQUESTED_BY_PEER`), or otherwise sends a pair request to it.
+  `accept: true` may be sent for clarity but is not required.
+- If `reject: true`, declines a pending request or unpairs (same as `unpair`).
 - If the device has no active connection, the daemon dials it on demand
   using its last-seen discovery address (background auto-dial no longer
   connects to unpaired devices), then sends the pair request.
@@ -311,7 +312,7 @@ Send a file to a device.
 **Request payload:**
 
 ```json
-{"deviceId": "a1b2c3d4e5f6_...", "file": "/path/to/file.pdf"}
+{"deviceId": "a1b2c3d4e5f6_...", "filePath": "/path/to/file.pdf"}
 ```
 
 **Response data:** none
@@ -355,7 +356,9 @@ Request messages from a specific conversation thread.
 {"deviceId": "a1b2c3d4e5f6_...", "threadID": 42}
 ```
 
-Optional fields: `rangeStartTimestamp` (int64), `numberToRequest` (int64).
+Optional fields, each applied on its own: `rangeStartTimestamp` (int64, ms
+epoch) returns only messages at or before it, and `numberToRequest` (int64) caps
+how many, newest first. With both omitted the phone returns the whole thread.
 
 **Response data:** none
 
@@ -685,10 +688,15 @@ Send an MPRIS control action to a device.
 {"deviceId": "a1b2c3d4e5f6_...", "action": "play"}
 ```
 
-Supported actions: `"play"`, `"pause"`, `"playpause"`, `"next"`, `"previous"`,
-`"stop"`, `"raise"`, `"quit"`. Volume can be set with `"setVolume"` (requires
-an integer value field). Seek with `"seek"` (int64, offset in ms) or
-`"setPosition"` (int64, absolute position in ms).
+Supported actions: `"Play"`, `"Pause"`, `"PlayPause"`, `"Next"`, `"Previous"`,
+`"Stop"`, `"raise"`, `"quit"`. The first six are matched case-insensitively and
+sent in the spelling the phone expects, so `"playpause"` works too. Set the
+volume with a `"volume"` field (int, 0–100). Seek with `"setPosition"` (int64,
+absolute position in ms) or `"seek"` (int64, relative offset in ms, converted
+to an absolute position from the tracked playback state, since phones only
+implement absolute positioning). A `"seek"` with no tracked position is
+rejected with an error rather than sent as a no-op — use `"setPosition"` if you
+already know the target. `action` may be omitted for any of these.
 
 **Response data:** none
 
@@ -850,6 +858,11 @@ The `events` filter is applied on the server side. Only events whose type
 string exactly matches one of the filters are delivered. Invalid/unknown
 filter strings are silently ignored — they simply match nothing.
 
+Omitting `events` does **not** mean everything: the SMS types are excluded,
+because a subscriber that matches them also arms the phone and receives message
+bodies. Naming `sms.incoming` is the entire opt-in — it arms the phone and
+receives the pushes, with no separate configuration.
+
 ### Reconnection
 
 The official `kcd watch` CLI client implements automatic reconnection with
@@ -933,6 +946,11 @@ A remote device is requesting pairing.
 
 The 16-character verification key should be displayed to the user to confirm
 the same key is shown on the remote device.
+
+The device ID is the event's `deviceId` field. Accept with `pair` for that ID,
+or refuse with `unpair`; this event never implies consent. A client that needs
+the advertisement window open without a listener of its own can use
+`kcd pair --advertise-only`, which starts broadcast and accepts nothing.
 
 #### `pair.accepted`
 
@@ -1248,6 +1266,9 @@ Device volume level changed (sent in two shapes).
 ```
 
 ### 5.11 SMS Events
+
+Opt-in. Naming the type is what subscribes to it; an unfiltered watch stream
+does not receive these.
 
 #### `sms.incoming`
 

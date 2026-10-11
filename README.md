@@ -100,9 +100,10 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
   completes. When your phone asks to pair, the panel shows the request and
   its verification code: compare it with the phone, then **Accept** or
   **Refuse**. Nothing is trusted until you accept, so a stranger on the
-  network cannot pair itself. Pairing from the panel needs a kcd built
-  with `kcd pair --advertise-only`; on an older build the panel says so
-  and you can still pair from a terminal with `kcd pair`. Daemon down?
+  network cannot pair itself. Pairing from the panel needs kcd 1.22.1
+  or newer, which provides `kcd pair --advertise-only`; on an older build
+  the panel says so and you can still pair from a terminal with `kcd pair`.
+  Daemon down?
   **Start daemon** primes the socket, then the next probe wakes the daemon
   on its own.
 
