@@ -372,6 +372,52 @@ function screenshotShareCommand(scriptPath, deviceId, deviceName) {
   return ["bash", script, id, name]
 }
 
+// Every icon glyph the panel renders, as codepoints: the private-use
+// ranges nerd fonts populate. The icon-font probe covers exactly this set
+// (a guard test extracts the real glyphs from the sources and fails on
+// drift), so a new glyph is not actually covered until it is listed here.
+var ICON_CODEPOINTS = "F001 F00C F00D F011 F011C F013 F021 F028 F030 F048 F04B F04C F04D F051 F052 F071 F07B F0C1 F0EA F10B F1D8 F1E6 F1EB F0079 F007A F007B F007C F007D F007E F007F F0080 F0081 F0082 F0083 F0085 F0086 F0087 F0088 F0089 F008A F008B F089C F089D F089E"
+
+// fontconfig match for the icon glyphs, preferring the theme family. If the
+// theme font covers every codepoint the match returns it unchanged; if it
+// does not (a plain font after `omarchy font set`), fontconfig substitutes
+// the first installed family that does. So icon Texts can bind the result
+// unconditionally: no tofu, no mixing families mid-row, and no guessing
+// here about what is installed. argv only (no shell), so a family name with
+// spaces needs no quoting.
+function iconProbeCommand(themeFontFamily) {
+  var family = String(themeFontFamily || "monospace")
+  return ["fc-match", "-f", "%{family[0]}", ":family=" + family + ":charset=" + ICON_CODEPOINTS]
+}
+
+// First stdout line trimmed, or "" when the probe said nothing usable.
+// "" keeps the theme font: identical to today's behavior, never tofu by
+// our own hand.
+function parseIconProbeOutput(text) {
+  var line = String(text || "").split("\n")[0]
+  if (!line) return ""
+  line = line.replace(/^\s+|\s+$/g, "")
+  return line
+}
+
+// Family for icon Texts: the probed covering family once known, else the
+// theme font. One shared picker so the fallback cannot drift per site.
+function iconFont(probed, fallback) {
+  var p = String(probed || "")
+  return p !== "" ? p : String(fallback || "")
+}
+
+// Bar label runs: the label is one icon glyph plus figures ("󰂃 69%"), and a
+// single Text cannot hold two families, so BarWidget renders two Texts. Split
+// on the first space; the space stays with the figures so the measured width
+// matches the whole string. No space means figures only (empty icon).
+function barLabelRuns(label) {
+  var s = String(label || "")
+  var at = s.indexOf(" ")
+  if (at < 0) return { icon: "", figures: s }
+  return { icon: s.slice(0, at), figures: s.slice(at) }
+}
+
 // Nerd Font battery ladder, same convention as omarchy.power: the icon
 // itself encodes level + charging, so no bolt emoji is ever needed.
 var BATTERY_CHARGING = ["󰢜", "󰂆", "󰂇", "󰂈", "󰢝", "󰂉", "󰢞", "󰂊", "󰂋", "󰂅"]
@@ -478,6 +524,11 @@ if (typeof module !== "undefined") {
     mprisCommand: mprisCommand,
     seekCommand: seekCommand,
     batteryText: batteryText,
+    iconFont: iconFont,
+    barLabelRuns: barLabelRuns,
+    iconProbeCommand: iconProbeCommand,
+    parseIconProbeOutput: parseIconProbeOutput,
+    ICON_CODEPOINTS: ICON_CODEPOINTS,
     batteryIcon: batteryIcon,
     batteryLevelIndex: batteryLevelIndex,
     positionText: positionText,

@@ -26,6 +26,9 @@ Item {
   property string lastSeenText: "—"
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  // Family for the phone/battery/wifi glyphs only; all copy keeps
+  // `fontFamily`. See QuickTile.iconFontFamily.
+  property string iconFontFamily: fontFamily
   readonly property color dim: Qt.darker(foreground, 1.5)
   // Connection state follows the theme accent, like the media seeker.
   property color accent: Color.accent
@@ -63,7 +66,7 @@ Item {
         textFormat: Text.PlainText
         text: "󰄜"
         color: header.foreground
-        font.family: header.fontFamily
+        font.family: header.iconFontFamily
         font.pixelSize: Style.font.title + 14
       }
 
@@ -124,7 +127,7 @@ Item {
           ? Kcd.batteryIcon(header.batteryCharge, header.batteryCharging) + " " + header.batteryCharge + "%"
           : "󰂃 --"
         color: header.foreground
-        font.family: header.fontFamily
+        font.family: header.iconFontFamily
         font.pixelSize: Style.font.body
         font.bold: true
       }
@@ -135,7 +138,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         text: ""
         color: header.foreground
-        font.family: header.fontFamily
+        font.family: header.iconFontFamily
         font.pixelSize: Style.font.body
         font.bold: true
 

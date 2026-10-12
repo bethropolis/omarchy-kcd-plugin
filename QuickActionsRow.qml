@@ -20,6 +20,9 @@ Column {
   property string deviceName: "phone"
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  // Icon glyphs use the fontconfig-probed covering family; labels use
+  // `fontFamily`. See QuickTile.iconFontFamily.
+  property string iconFontFamily: fontFamily
   readonly property color dim: Qt.darker(foreground, 1.5)
   readonly property real gap: Style.space(8)
 
@@ -50,6 +53,7 @@ Column {
       tooltipText: "Ring phone"
       foreground: actions.foreground
       fontFamily: actions.fontFamily
+      iconFontFamily: actions.iconFontFamily
       enabled: actions.liveConnected
       onTapped: actions.tileTapped("ring")
     }
@@ -61,6 +65,7 @@ Column {
       tooltipText: "Send a screenshot to " + actions.deviceName
       foreground: actions.foreground
       fontFamily: actions.fontFamily
+      iconFontFamily: actions.iconFontFamily
       enabled: actions.liveConnected
       onTapped: actions.screenshotRequested()
     }
@@ -72,6 +77,7 @@ Column {
       tooltipText: "Sync clipboard"
       foreground: actions.foreground
       fontFamily: actions.fontFamily
+      iconFontFamily: actions.iconFontFamily
       enabled: actions.liveConnected
       onTapped: actions.tileTapped("clipboard")
     }
@@ -90,6 +96,7 @@ Column {
       tooltipText: "Send a file to " + actions.deviceName
       foreground: actions.foreground
       fontFamily: actions.fontFamily
+      iconFontFamily: actions.iconFontFamily
       enabled: actions.liveConnected
       onTapped: actions.shareRequested()
     }
@@ -103,6 +110,7 @@ Column {
         : "Mount the phone's storage and open it"
       foreground: actions.foreground
       fontFamily: actions.fontFamily
+      iconFontFamily: actions.iconFontFamily
       enabled: actions.liveConnected
       onTapped: actions.tileTapped("files")
     }

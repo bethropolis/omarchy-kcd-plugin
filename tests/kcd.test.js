@@ -2,6 +2,9 @@
 // Run: bun test tests/
 import { describe, it, expect } from "bun:test";
 import { createRequire } from "node:module";
+import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 const require = createRequire(import.meta.url);
 const Kcd = require("../Kcd.js");
@@ -337,5 +340,75 @@ describe("battery + misc display", () => {
     expect(Kcd.normalizeSignal({ signalStrengths: { "0": { networkDetailedType: "LTE" } } }).label).toBe("LTE");
     expect(Kcd.normalizeSignal({ signalStrengths: { "0": { networkType: "Unknown" } } })).toBeNull();
     expect(Kcd.normalizeSignal(null)).toBeNull();
+  });
+});
+
+describe("icon font probe", () => {
+  const charsetOf = (argv) => {
+    const pattern = argv[argv.length - 1];
+    return pattern.slice(pattern.indexOf("charset=") + "charset=".length).split(" ");
+  };
+
+  it("prefers the theme family, then any family covering every glyph", () => {
+    const argv = Kcd.iconProbeCommand("JetBrainsMono Nerd Font");
+    expect(argv[0]).toBe("fc-match");
+    expect(argv).toContain("%{family[0]}");
+    // The whole point: fontconfig returns the theme family unchanged when it
+    // covers all glyphs, and substitutes a covering family when it does not,
+    // so the caller can bind the result unconditionally.
+    expect(argv[argv.length - 1]).toMatch(/^:family=JetBrainsMono Nerd Font:charset=/);
+    expect(new Set(charsetOf(argv))).toEqual(new Set(Kcd.ICON_CODEPOINTS.split(" ")));
+  });
+
+  it("defaults to the monospace alias without a theme family", () => {
+    expect(Kcd.iconProbeCommand("")[3]).toMatch(/^:family=monospace:charset=/);
+    expect(Kcd.iconProbeCommand(null)[3]).toMatch(/^:family=monospace:charset=/);
+    expect(Kcd.iconProbeCommand()[3]).toMatch(/^:family=monospace:charset=/);
+  });
+
+  it("parseIconProbeOutput trims the first line, empty stays empty", () => {
+    expect(Kcd.parseIconProbeOutput("JetBrainsMono Nerd Font\n")).toBe("JetBrainsMono Nerd Font");
+    expect(Kcd.parseIconProbeOutput("  Iosevka Nerd Font  ")).toBe("Iosevka Nerd Font");
+    expect(Kcd.parseIconProbeOutput("Iosevka Nerd Font\nextra")).toBe("Iosevka Nerd Font");
+    expect(Kcd.parseIconProbeOutput("")).toBe("");
+    expect(Kcd.parseIconProbeOutput(null)).toBe("");
+  });
+
+  it("iconFont falls back to the theme family until the probe lands", () => {
+    expect(Kcd.iconFont("Iosevka Nerd Font", "monospace")).toBe("Iosevka Nerd Font");
+    expect(Kcd.iconFont("", "monospace")).toBe("monospace");
+    expect(Kcd.iconFont(null, "monospace")).toBe("monospace");
+  });
+
+  it("barLabelRuns splits the icon glyph from the figures", () => {
+    // The space stays with the figures so the two overlay Texts measure the
+    // same width as the whole string.
+    expect(Kcd.barLabelRuns("X 69%")).toEqual({ icon: "X", figures: " 69%" });
+    expect(Kcd.barLabelRuns("X --")).toEqual({ icon: "X", figures: " --" });
+    expect(Kcd.barLabelRuns("69%")).toEqual({ icon: "", figures: "69%" });
+    expect(Kcd.barLabelRuns("")).toEqual({ icon: "", figures: "" });
+    expect(Kcd.barLabelRuns(null)).toEqual({ icon: "", figures: "" });
+  });
+
+  it("ICON_CODEPOINTS covers every PUA glyph used in the sources", () => {
+    // The probe only shields the glyphs it was told about: a new icon added
+    // in any QML/JS file without a matching codepoint here would silently
+    // lose coverage, which is exactly the tofu this feature exists to stop.
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const isPua = (o) =>
+      (o >= 0xe000 && o <= 0xf8ff) ||
+      (o >= 0xf0000 && o <= 0xffffd) ||
+      (o >= 0x100000 && o <= 0x10fffd);
+    const used = new Set();
+    for (const name of readdirSync(root)) {
+      if (!name.endsWith(".qml") && name !== "Kcd.js") continue;
+      for (const ch of readFileSync(join(root, name), "utf8")) {
+        const o = ch.codePointAt(0);
+        if (isPua(o)) used.add(o.toString(16).toUpperCase());
+      }
+    }
+    const covered = new Set(Kcd.ICON_CODEPOINTS.split(" "));
+    const missing = [...used].filter((cp) => !covered.has(cp)).sort();
+    expect(missing).toEqual([]);
   });
 });

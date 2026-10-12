@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "Kcd.js" as Kcd
 
 // Bar button for the kcd panel: battery icon + charge that
 // mirrors the panel state. The panel owns all kcd state; this widget only
@@ -15,6 +16,17 @@ BarWidget {
   readonly property string panelLabel: panelLoader.item ? String(panelLoader.item.barLabel || "") : ""
   readonly property string panelTooltip: panelLoader.item ? String(panelLoader.item.barTooltip || "") : ""
   readonly property bool panelConnected: panelLoader.item ? panelLoader.item.liveConnected === true : false
+  // Icon/battery glyph family from the panel's fontconfig probe. Empty until
+  // the panel loads, hence the theme-font fallback at the use site.
+  readonly property string panelIconFont: panelLoader.item ? String(panelLoader.item.contentIconFont || "") : ""
+  // Theme family for the figures. The bar label is an icon plus figures but
+  // one Text cannot hold two families, so the button overlays two Texts:
+  // the glyph in the icon font, the figures here.
+  readonly property string barFontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+  readonly property string barIconFont: root.panelIconFont !== "" ? root.panelIconFont : root.barFontFamily
+  readonly property string labelText: root.panelLabel !== "" ? root.panelLabel : "󰄜 --"
+  readonly property string labelIcon: Kcd.barLabelRuns(root.labelText).icon
+  readonly property string labelFigures: Kcd.barLabelRuns(root.labelText).figures
 
   function injectPanel() {
     var target = panelLoader.item
@@ -76,7 +88,11 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.panelLabel !== "" ? root.panelLabel : "󰄜 --"
+    // The full string stays set so sizing and visibility follow the real
+    // content; the built-in label is hidden in favor of the two runs below.
+    text: root.labelText
+    labelVisible: false
+    fontFamily: root.barFontFamily
     dimmed: !root.panelConnected
     tooltipText: root.panelTooltip !== "" ? root.panelTooltip : "kcd Phone"
     horizontalMargin: 8.75
@@ -85,6 +101,43 @@ BarWidget {
     onPressed: function(b) {
       if (b === Qt.MiddleButton) root.refresh()
       else root.togglePanel()
+    }
+
+    // Icon + figures in their own families. Mirrors WidgetButton's label
+    // treatment (figure-height centering, native rendering, active color)
+    // so the overlay lines up with every other bar button.
+    Row {
+      anchors.centerIn: parent
+      anchors.verticalCenterOffset: !button.centerFigures || button.vertical
+        ? 0
+        : (figMetrics.descent - figMetrics.ascent + figMetrics.tightBoundingRect("0").height) / 2
+      spacing: 0
+
+      Text {
+        textFormat: Text.PlainText
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.labelIcon
+        color: button.active && button.useActiveColor ? button.activeColor : button.foreground
+        font.family: root.barIconFont
+        font.pixelSize: button.fontSize
+        renderType: Text.NativeRendering
+      }
+
+      Text {
+        textFormat: Text.PlainText
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.labelFigures
+        color: button.active && button.useActiveColor ? button.activeColor : button.foreground
+        font.family: root.barFontFamily
+        font.pixelSize: button.fontSize
+        renderType: Text.NativeRendering
+      }
+    }
+
+    FontMetrics {
+      id: figMetrics
+      font.family: root.barFontFamily
+      font.pixelSize: button.fontSize
     }
   }
 }

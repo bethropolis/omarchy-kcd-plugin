@@ -12,6 +12,10 @@ Rectangle {
   property string tooltipText: ""
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  // Family for the icon glyph only; the label keeps `fontFamily`. Callers
+  // pass the fontconfig-probed covering family so a plain theme font can't
+  // tofu the icons; it defaults to `fontFamily` (theme font) when unset.
+  property string iconFontFamily: fontFamily
   // Accent styling for the primary action (e.g. Start pairing).
   // Opt-in; everything else renders exactly as before.
   property bool accent: false
@@ -44,7 +48,7 @@ Rectangle {
       anchors.horizontalCenter: parent.horizontalCenter
       text: root.iconText
       color: root.accent && root.enabled ? Color.accent : root.foreground
-      font.family: root.fontFamily
+      font.family: root.iconFontFamily
       font.pixelSize: Style.font.body
     }
 

@@ -18,6 +18,28 @@ QtObject {
   // Single source so the spawn halves below can't drift apart.
   readonly property string pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/io.github.bethropolis.kcd"
 
+  // ---- Icon font
+  // Theme family pushed in by Panel.qml. The bar injects its font after
+  // this object is built, so a change re-probes rather than locking in the
+  // boot-time default.
+  property string themeFontFamily: "monospace"
+  // One-shot fontconfig probe result. Empty until it lands, which keeps the
+  // theme family: identical first paint, never tofu by our own hand.
+  property string probedIconFont: ""
+  // Family every icon Text binds to: the probe result once known, the theme
+  // family until then, so first paint never blocks on the probe.
+  readonly property string iconFontFamily: Kcd.iconFont(io.probedIconFont, io.themeFontFamily)
+
+  onThemeFontFamilyChanged: io.startFontProbe()
+  Component.onCompleted: io.startFontProbe()
+
+  // Asks fontconfig which family covers every icon glyph, preferring the
+  // theme family; see Kcd.iconProbeCommand. One short-lived spawn, no timer.
+  function startFontProbe() {
+    fontProbeProc.command = Kcd.iconProbeCommand(io.themeFontFamily)
+    fontProbeProc.running = true
+  }
+
   // ---- State
   property var devices: []
   readonly property var autoDevice: Kcd.pickAutoDevice(devices)
@@ -749,6 +771,17 @@ QtObject {
       } else {
         io.installOk = true
       }
+    }
+  }
+
+  // One-shot icon-font probe; see startFontProbe()/iconFontFamily. A
+  // missing fontconfig fails the spawn and simply leaves the theme family
+  // in place, so there is nothing to guard or retry.
+  property Process fontProbeProc: Process {
+    running: false
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: io.probedIconFont = Kcd.parseIconProbeOutput(text)
     }
   }
 
