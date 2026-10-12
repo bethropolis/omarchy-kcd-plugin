@@ -17,6 +17,9 @@ Column {
   property string deviceName: "phone"
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  // Family for the big status glyph and every tile icon; copy stays on
+  // `fontFamily`. See QuickTile.iconFontFamily.
+  property string iconFontFamily: fontFamily
   // True while `kcd pair --advertise-only` runs (owned by the panel).
   property bool pairing: false
   // Code from the pending pair request, so the phone's code can be
@@ -49,7 +52,7 @@ Column {
     horizontalAlignment: Text.AlignHCenter
     text: root.isDown ? "" : (root.isOffline ? "" : "")
     color: Qt.darker(root.foreground, 1.6)
-    font.family: root.fontFamily
+    font.family: root.iconFontFamily
     font.pixelSize: 40
   }
 
@@ -137,6 +140,7 @@ Column {
       tooltipText: "Pair with " + root.deviceName + " — only if the codes match"
       foreground: root.foreground
       fontFamily: root.fontFamily
+      iconFontFamily: root.iconFontFamily
       accent: true
       onTapped: root.acceptPairRequested()
     }
@@ -148,6 +152,7 @@ Column {
       tooltipText: "Send a rejection to " + root.deviceName
       foreground: root.foreground
       fontFamily: root.fontFamily
+      iconFontFamily: root.iconFontFamily
       onTapped: root.rejectPairRequested()
     }
   }
@@ -171,6 +176,7 @@ Column {
       tooltipText: root.isDown ? "Prime the kcd socket - the daemon starts on demand" : (root.pairing ? "Stop advertising for pairing" : "Make this machine discoverable, without accepting anything")
       foreground: root.foreground
       fontFamily: root.fontFamily
+      iconFontFamily: root.iconFontFamily
       accent: true
       enabled: root.isDown ? !root.startingDaemon : true
       onTapped: root.isDown ? root.daemonStartRequested() : root.pairRequested()
@@ -183,6 +189,7 @@ Column {
       tooltipText: "Probe again"
       foreground: root.foreground
       fontFamily: root.fontFamily
+      iconFontFamily: root.iconFontFamily
       onTapped: root.retryRequested()
     }
   }
@@ -202,6 +209,7 @@ Column {
       tooltipText: "Stop advertising for pairing"
       foreground: root.foreground
       fontFamily: root.fontFamily
+      iconFontFamily: root.iconFontFamily
       onTapped: root.pairRequested()
     }
   }

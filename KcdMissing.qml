@@ -9,6 +9,9 @@ Column {
 
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  // Family for the big status glyph (and the Retry tile's icon); text stays
+  // on `fontFamily`. See QuickTile.iconFontFamily.
+  property string iconFontFamily: fontFamily
 
   signal retryRequested()
 
@@ -21,7 +24,7 @@ Column {
     horizontalAlignment: Text.AlignHCenter
     text: ""
     color: Qt.darker(root.foreground, 1.6)
-    font.family: root.fontFamily
+    font.family: root.iconFontFamily
     font.pixelSize: 40
   }
 
@@ -54,6 +57,7 @@ Column {
     tooltipText: "Check again for kcd"
     foreground: root.foreground
     fontFamily: root.fontFamily
+    iconFontFamily: root.iconFontFamily
     enabled: true
     onTapped: root.retryRequested()
   }

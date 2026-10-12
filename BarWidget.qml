@@ -15,6 +15,11 @@ BarWidget {
   readonly property string panelLabel: panelLoader.item ? String(panelLoader.item.barLabel || "") : ""
   readonly property string panelTooltip: panelLoader.item ? String(panelLoader.item.barTooltip || "") : ""
   readonly property bool panelConnected: panelLoader.item ? panelLoader.item.liveConnected === true : false
+  // Icon/battery glyph family from the panel's fontconfig probe. The bar
+  // label is an icon plus figures, so it must follow the icon font or the
+  // phone glyph can tofu under a plain theme font. Empty until the panel
+  // loads, hence the theme-font fallback at the use site.
+  readonly property string panelIconFont: panelLoader.item ? String(panelLoader.item.contentIconFont || "") : ""
 
   function injectPanel() {
     var target = panelLoader.item
@@ -77,6 +82,7 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     text: root.panelLabel !== "" ? root.panelLabel : "󰄜 --"
+    fontFamily: root.panelIconFont !== "" ? root.panelIconFont : Style.font.family
     dimmed: !root.panelConnected
     tooltipText: root.panelTooltip !== "" ? root.panelTooltip : "kcd Phone"
     horizontalMargin: 8.75

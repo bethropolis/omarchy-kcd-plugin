@@ -157,3 +157,63 @@ describe("downProbeTimer never runs when closed", () => {
     expect(m[1]).toMatch(/io\.refresh\(\)/);
   });
 });
+
+describe("icon font selection", () => {
+  const io = qml("KcdIo.qml");
+  const panel = qml("Panel.qml");
+  const tile = qml("QuickTile.qml");
+  const card = qml("MediaCard.qml");
+  const bar = qml("BarWidget.qml");
+
+  it("probes once and derives the icon family from the theme font", () => {
+    expect(io).toMatch(/property Process fontProbeProc: Process/);
+    expect(io).toMatch(/onStreamFinished: io\.probedIconFont = Kcd\.parseIconProbeOutput\(text\)/);
+    expect(io).toMatch(/readonly property string iconFontFamily: Kcd\.iconFont\(io\.probedIconFont, io\.themeFontFamily\)/);
+    // Re-probe when the bar injects its font, and once at startup: neither
+    // alone is sufficient (the injected value can equal the default).
+    expect(io).toMatch(/onThemeFontFamilyChanged: io\.startFontProbe\(\)/);
+    expect(io).toMatch(/Component\.onCompleted: io\.startFontProbe\(\)/);
+    expect(io).toMatch(/fontProbeProc\.command = Kcd\.iconProbeCommand\(io\.themeFontFamily\)/);
+  });
+
+  it("hands the theme family down and the probed family back up", () => {
+    expect(panel).toMatch(/themeFontFamily: root\.contentFontFamily/);
+    expect(panel).toMatch(/readonly property string contentIconFont: io\.iconFontFamily/);
+  });
+
+  it("passes the probed family to every icon-bearing section", () => {
+    const plumbed = [...panel.matchAll(/iconFontFamily: root\.contentIconFont/g)];
+    // One per section: PanelHeader, MediaCard, QuickActionsRow, KcdMissing,
+    // KcdUnpaired. A section added without this drops back to theme font.
+    expect(plumbed.length).toBe(5);
+  });
+
+  it("keeps labels on the theme font and icons on the probed one", () => {
+    expect(tile).toMatch(/property string iconFontFamily: fontFamily/);
+    expect(tile).toMatch(/font\.family: root\.iconFontFamily/);
+    // The tile label must keep the theme font.
+    expect(tile).toMatch(/text: root\.label[\s\S]*?font\.family: root\.fontFamily/);
+    expect(card).toMatch(/property string iconFontFamily: fontFamily/);
+    expect(card).toMatch(/font\.family: card\.iconFontFamily/);
+    // Transport buttons take the icon family; the title/artist do not.
+    expect(card).toMatch(/fontFamily: card\.iconFontFamily/);
+    expect(card).toMatch(/text: card\.hasTrack && card\.track \? card\.track\.title[\s\S]*?font\.family: card\.fontFamily/);
+  });
+
+  it("routes tile icons through the probed family in every host", () => {
+    for (const [name, owner] of [
+      ["QuickActionsRow.qml", "actions"],
+      ["KcdMissing.qml", "root"],
+      ["KcdUnpaired.qml", "root"],
+    ]) {
+      const src = qml(name);
+      expect(src).toMatch(/property string iconFontFamily: fontFamily/);
+      expect(src).toMatch(new RegExp(`iconFontFamily: ${owner}\\.iconFontFamily`));
+    }
+  });
+
+  it("lets the closed-bar label follow the probed family", () => {
+    expect(bar).toMatch(/readonly property string panelIconFont: panelLoader\.item \? String\(panelLoader\.item\.contentIconFont/);
+    expect(bar).toMatch(/fontFamily: root\.panelIconFont !== "" \? root\.panelIconFont : Style\.font\.family/);
+  });
+});

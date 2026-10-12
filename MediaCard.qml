@@ -19,6 +19,9 @@ Rectangle {
   property double trackLength: 0
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  // Family for icon glyphs only (transport, placeholder, play/pause); the
+  // title, artist and timer keep `fontFamily`. See QuickTile.iconFontFamily.
+  property string iconFontFamily: fontFamily
   readonly property color dim: Qt.darker(foreground, 1.5)
   // Theme accent (theme/colors.toml via Color.accent) drives the seeker
   // and the play button — never a hardcoded violet.
@@ -110,7 +113,7 @@ Rectangle {
     textFormat: Text.PlainText
     text: ""
     color: card.dim
-    font.family: card.fontFamily
+    font.family: card.iconFontFamily
     font.pixelSize: Style.font.title + 10
 
     SequentialAnimation on opacity {
@@ -198,7 +201,7 @@ Rectangle {
           iconText: ""
           tooltipText: "Previous"
           foreground: "white"
-          fontFamily: card.fontFamily
+          fontFamily: card.iconFontFamily
           fontSize: Style.font.caption
           enabled: card.liveConnected
           onClicked: card.mediaAction("previous")
@@ -216,7 +219,7 @@ Rectangle {
             anchors.centerIn: parent
             text: card.playing ? "" : ""
             color: card.onAccent
-            font.family: card.fontFamily
+            font.family: card.iconFontFamily
             font.pixelSize: 13
             font.bold: true
           }
@@ -235,7 +238,7 @@ Rectangle {
           iconText: ""
           tooltipText: "Next"
           foreground: "white"
-          fontFamily: card.fontFamily
+          fontFamily: card.iconFontFamily
           fontSize: Style.font.caption
           enabled: card.liveConnected
           onClicked: card.mediaAction("next")

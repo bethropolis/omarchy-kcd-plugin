@@ -25,6 +25,7 @@ Panel {
   KcdIo {
     id: io
     panelOpen: root.opened
+    themeFontFamily: root.contentFontFamily
   }
 
   // Read-only views the UI sections and BarWidget.qml consume.
@@ -81,6 +82,10 @@ Panel {
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property color contentDim: Qt.darker(contentForeground, 1.5)
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
+  // Icon glyphs bind to this, not contentFontFamily: fontconfig resolves a
+  // family that covers every glyph, so a plain theme font can neither tofu
+  // the icons nor make Qt mix families mid-row. See KcdIo.iconFontFamily.
+  readonly property string contentIconFont: io.iconFontFamily
 
   // Unpair is a long-press on the header plus a confirm step, so the
   // dashboard carries no affordance for it.
@@ -202,6 +207,7 @@ Panel {
             lastSeenText: root.lastSeenText
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
+            iconFontFamily: root.contentIconFont
             onUnpairRequested: root.requestUnpair()
           }
 
@@ -219,6 +225,7 @@ Panel {
             trackLength: root.trackLength
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
+            iconFontFamily: root.contentIconFont
             onMediaAction: function(action) { root.mediaAction(action) }
           }
 
@@ -232,6 +239,7 @@ Panel {
             deviceName: root.deviceName
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
+            iconFontFamily: root.contentIconFont
             onTileTapped: function(tile) { root.runTile(tile) }
             onShareRequested: root.shareFile()
             onScreenshotRequested: root.shareScreenshot()
@@ -242,6 +250,7 @@ Panel {
             visible: root.uiState === "missing"
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
+            iconFontFamily: root.contentIconFont
             onRetryRequested: root.refresh()
           }
 
@@ -258,6 +267,7 @@ Panel {
             startingDaemon: root.startingDaemon
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
+            iconFontFamily: root.contentIconFont
             onRetryRequested: root.refresh()
             onPairRequested: root.togglePairing()
             onDaemonStartRequested: root.startDaemon()
@@ -282,7 +292,7 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 text: ""
                 color: settingsMouse.containsMouse ? root.contentForeground : root.contentDim
-                font.family: root.contentFontFamily
+                font.family: root.contentIconFont
                 font.pixelSize: Style.font.body
 
                 MouseArea {
