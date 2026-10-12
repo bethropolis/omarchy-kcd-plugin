@@ -37,7 +37,10 @@ QtObject {
   // Drift-free position from the daemon's anchor stamp: pos + elapsed
   // while playing, frozen otherwise. Without an anchor (paused/legacy)
   // we hold the last reported pos.
-  readonly property double displayPos: io.anchorPos()
+  // Seek target ms while a seek is in flight, -1 otherwise. Cleared by the
+  // next position report (mpris.update or snapshot), never by a timer.
+  property double seekHoldMs: -1
+  readonly property double displayPos: io.seekHoldMs >= 0 ? io.seekHoldMs : io.anchorPos()
   property string lastSeenText: "—"
   property string daemonText: "starting…"
   // "—" until the version probe lands: never a fake version. In the
@@ -211,6 +214,7 @@ QtObject {
   // full state (devices with embedded battery/media/signal), so there is
   // no partial list to top up and no empty-guard.
   function applyDeviceList(devs) {
+    io.seekHoldMs = -1
     var prevId = io.deviceId
     io.devices = Kcd.stickDevice(devs, prevId)
     var switched = io.deviceId !== prevId
@@ -251,17 +255,29 @@ QtObject {
   }
 
   function anchorPos() {
-    var now = io.clockMs
+    return io.posAt(io.clockMs)
+  }
+
+  // Position at a given wall-clock ms. The clock must never predate the
+  // sample: a ticker that hasn't ticked yet (freshly opened panel) would
+  // otherwise rewind the anchor to 0 and turn a drag into an overshoot.
+  function posAt(now) {
     // liveTrack (daemon-gated), never the raw cache: a dead daemon must
     // freeze the readout instead of creeping on stale data.
     if (!io.liveTrack) return 0
     var base = Number(io.liveTrack.pos) || 0
     if (io.liveTrack.isPlaying === true && Number(io.liveTrack.posAnchorMs) > 0) {
-      base += now - Number(io.liveTrack.posAnchorMs)
+      base += Math.max(0, now - Number(io.liveTrack.posAnchorMs))
     }
     var len = Number(io.liveTrack.length) || 0
     if (len > 0) base = Math.min(len, base)
     return Math.max(0, base)
+  }
+
+  // A freshly opened panel has a ticker that hasn't ticked: seed the clock
+  // so the first paint already interpolates instead of showing the sample.
+  onPanelOpenChanged: {
+    if (io.panelOpen) io.clockMs = Date.now()
   }
 
   function onVersionOutput(text) {
@@ -320,6 +336,7 @@ QtObject {
       }
     } else if (type === "mpris.update") {
       if (io.deviceId !== "" && event.deviceId !== io.deviceId) return
+      io.seekHoldMs = -1
       io.setTrack(Kcd.normalizeTrack(event.payload))
     }
   }
@@ -550,6 +567,21 @@ QtObject {
 
   function mediaAction(action) {
     Quickshell.execDetached(Kcd.mprisCommand(action, io.deviceId))
+  }
+
+  // Seek from the card's wave drag: the drag names an absolute target,
+  // the CLI only moves relative, so send the delta from the live anchor.
+  // Fire-and-forget like every other transport action; the hold above
+  // covers the round-trip, and the daemon's next report is confirmation.
+  function mediaSeek(positionMs) {
+    if (!io.liveConnected || io.deviceId === "") return
+    var target = Math.max(0, Number(positionMs) || 0)
+    // Fresh stamp, never the ticker: the whole point is the ticker may be
+    // stale at the moment of the drag.
+    var cmd = Kcd.seekCommand(io.deviceId, target - io.posAt(Date.now()))
+    if (!cmd) return
+    io.seekHoldMs = target
+    Quickshell.execDetached(cmd)
   }
 
   // Local interpolation so the wave playhead creeps while playing:

@@ -266,6 +266,19 @@ function mprisCommand(action, deviceId) {
   return cmd
 }
 
+// `kcd mpris seek <offset>`: relative seek by whole seconds. The CLI has
+// no absolute mode (bare "60" already means +60s), so callers pass the
+// delta from the current anchor. Signed durations only: "+23s", "-15s".
+// A zero delta is a no-op null, never a seek-to-0.
+function seekCommand(deviceId, offsetMs) {
+  var id = String(deviceId || "")
+  if (!isSafeDeviceId(id)) return null
+  var secs = Math.round(Number(offsetMs) / 1000)
+  if (!isFinite(secs) || secs === 0) return null
+  var offset = (secs > 0 ? "+" : "-") + String(Math.abs(secs)) + "s"
+  return ["kcd", "mpris", "seek", "--device", id, offset]
+}
+
 // `kcd pair --advertise-only --json`: make the daemon discoverable for
 // pairing and accept nothing. The client learns about candidates from the
 // `pair.requested` event on its existing watch stream, so the owner can
@@ -460,6 +473,7 @@ if (typeof module !== "undefined") {
     watchCommand: watchCommand,
     tileCommand: tileCommand,
     mprisCommand: mprisCommand,
+    seekCommand: seekCommand,
     batteryText: batteryText,
     batteryIcon: batteryIcon,
     batteryLevelIndex: batteryLevelIndex,

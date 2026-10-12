@@ -263,6 +263,20 @@ describe("command builders", () => {
     expect(Kcd.parseAdvertiseOutput('{"other":true}')).toBeNull();
   });
 
+  it("seekCommand sends signed second offsets with flags first", () => {
+    // The CLI has no absolute mode: bare seconds already mean forward.
+    expect(Kcd.seekCommand("9a5c23ea_7195", 23000)).toEqual(
+      ["kcd", "mpris", "seek", "--device", "9a5c23ea_7195", "+23s"]);
+    expect(Kcd.seekCommand("9a5c23ea_7195", -15000)).toEqual(
+      ["kcd", "mpris", "seek", "--device", "9a5c23ea_7195", "-15s"]);
+    const argv = Kcd.seekCommand("d", 1000);
+    expect(argv.indexOf("--device")).toBeLessThan(argv.indexOf("+1s"));
+    // Zero (and sub-second) deltas are no-ops, never seek-to-0.
+    for (const bad of [["", 1000], [null, 1000], ["x'; id; echo '", 1000], ["d", 0], ["d", 400], ["d", NaN]]) {
+      expect(Kcd.seekCommand(bad[0], bad[1])).toBeNull();
+    }
+  });
+
   it("unpairCommand builds argv and guards the device id", () => {
     expect(Kcd.unpairCommand("9a5c23ea_7195_4da1")).toEqual(["kcd", "unpair", "9a5c23ea_7195_4da1"]);
     expect(Kcd.unpairCommand("")).toBeNull();

@@ -61,6 +61,7 @@ Panel {
   function startDaemon() { io.startDaemon() }
   function runTile(tile) { io.runTile(tile) }
   function mediaAction(action) { io.mediaAction(action) }
+  function mediaSeek(ms) { io.mediaSeek(ms) }
   // shareFile() splits at the panel boundary: guard + close here (UI),
   // pick-and-send in io (process spawn).
   function shareFile() {
@@ -220,6 +221,7 @@ Panel {
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
             onMediaAction: function(action) { root.mediaAction(action) }
+            onMediaSeek: function(ms) { root.mediaSeek(ms) }
           }
 
 

@@ -27,6 +27,20 @@ Rectangle {
   readonly property string onAccent: accent.hslLightness > 0.5 ? "#161824" : "#ffffff"
 
   signal mediaAction(string action)  // "previous" | "toggle" | "next"
+  signal mediaSeek(double posMs)  // absolute target ms from a wave drag
+  // Drag preview ms, -1 when not dragging. The wave and badge render this
+  // while held so the playhead follows the finger before the daemon does.
+  property double seekPreviewMs: -1
+  function seekTo(ms) {
+    if (!card.liveConnected || !(card.trackLength > 0)) return
+    card.seekPreviewMs = Math.max(0, Math.min(card.trackLength, ms))
+  }
+  function finishSeek() {
+    if (card.seekPreviewMs < 0) return
+    var target = card.seekPreviewMs
+    card.seekPreviewMs = -1
+    card.mediaSeek(target)
+  }
 
   // Changed-handlers don't fire for values already set at creation.
   Component.onCompleted: syncArtSource()
@@ -260,7 +274,7 @@ Rectangle {
         // Paint in device pixels so the wave stays crisp.
         canvasSize: Qt.size(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)))
 
-        property real progressVal: Kcd.progress(card.displayPos, card.trackLength)
+        property real progressVal: Kcd.progress(card.seekPreviewMs >= 0 ? card.seekPreviewMs : card.displayPos, card.trackLength)
         // Local mirror so a theme-accent change repaints even when paused.
         property color accent: card.accent
         onProgressValChanged: requestPaint()
@@ -310,6 +324,20 @@ Rectangle {
             ctx.fill()
           }
         }
+
+        // Drag-to-seek: press or drag sets the preview, release commits it.
+        // Dead unless connected with a known length, so a length-less
+        // stream can never fire a seek at 0.
+        MouseArea {
+          anchors.fill: parent
+          enabled: card.liveConnected && card.trackLength > 0
+          cursorShape: Qt.PointingHandCursor
+          preventStealing: true
+          onPressed: function(mouse) { card.seekTo(mouse.x / width * card.trackLength) }
+          onPositionChanged: function(mouse) { if (pressed) card.seekTo(mouse.x / width * card.trackLength) }
+          onReleased: function() { card.finishSeek() }
+          onCanceled: function() { card.seekPreviewMs = -1 }
+        }
       }
 
       // Unified timer badge (elapsed / total)
@@ -326,7 +354,7 @@ Rectangle {
         Text {
           anchors.centerIn: parent
           textFormat: Text.PlainText
-          text: Kcd.positionText(card.displayPos, card.trackLength)
+          text: Kcd.positionText(card.seekPreviewMs >= 0 ? card.seekPreviewMs : card.displayPos, card.trackLength)
           color: "#f8fafc"
           font.family: card.fontFamily
           font.pixelSize: Style.font.caption

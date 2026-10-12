@@ -157,3 +157,43 @@ describe("downProbeTimer never runs when closed", () => {
     expect(m[1]).toMatch(/io\.refresh\(\)/);
   });
 });
+
+describe("drag-to-seek", () => {
+  const card = qml("MediaCard.qml");
+  const io = qml("KcdIo.qml");
+  const panel = qml("Panel.qml");
+
+  it("commits the seek only on release, preview while held", () => {
+    expect(card).toMatch(/signal mediaSeek\(double posMs\)/);
+    expect(card).toMatch(/property double seekPreviewMs: -1/);
+    // Release commits exactly once; cancel drops the preview silently.
+    expect(card).toMatch(/onReleased: function\(\) \{ card\.finishSeek\(\) \}/);
+    expect(card).toMatch(/card\.mediaSeek\(target\)/);
+  });
+
+  it("never seeks without a connection and a known length", () => {
+    expect(card).toMatch(/enabled: card\.liveConnected && card\.trackLength > 0/);
+    expect(card).toMatch(/if \(!card\.liveConnected \|\| !\(card\.trackLength > 0\)\) return/);
+    expect(io).toMatch(/if \(!io\.liveConnected \|\| io\.deviceId === ""\) return/);
+  });
+
+  it("never rewinds the anchor with a stale clock", () => {
+    // clockMs is 0 until the first tick after opening: elapsed must floor
+    // at 0 or a fresh drag computes from position 0 and overshoots.
+    expect(io).toMatch(/base \+= Math\.max\(0, now - Number\(io\.liveTrack\.posAnchorMs\)\)/);
+    expect(io).toMatch(/onPanelOpenChanged:[\s\S]*?io\.clockMs = Date\.now\(\)/);
+  });
+
+  it("holds the target until the daemon reports back", () => {
+    expect(io).toMatch(/property double seekHoldMs: -1/);
+    expect(io).toMatch(/var target = Math\.max\(0, Number\(positionMs\) \|\| 0\)/);
+    expect(io).toMatch(/Kcd\.seekCommand\(io\.deviceId, target - io\.posAt\(Date\.now\(\)\)\)/);
+    expect(io).toMatch(/io\.seekHoldMs = target/);
+  });
+
+  it("plumbs mediaSeek from card through panel to io", () => {
+    expect(panel).toMatch(/function mediaSeek\(ms\) \{ io\.mediaSeek\(ms\) \}/);
+    expect(panel).toMatch(/onMediaSeek: function\(ms\) \{ root\.mediaSeek\(ms\) \}/);
+    expect(io).toMatch(/function mediaSeek\(positionMs\)/);
+  });
+});
