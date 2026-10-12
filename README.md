@@ -73,7 +73,8 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
   network type when available), battery, last-seen.
 
 * Media card: album art, title/artist, prev / play-pause / next, wave
-  seeker with smooth playhead.
+  seeker with smooth playhead. Drag the wave to seek; the playhead holds
+  the target until the phone reports back.
 
 * Quick actions, all live (they dim when the phone is unreachable):
   **Ring**, **Screenshot**, **Clipboard**, then **Share** and **Files**
