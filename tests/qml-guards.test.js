@@ -172,8 +172,8 @@ describe("drag-to-seek", () => {
   });
 
   it("never seeks without a connection and a known length", () => {
-    expect(card).toMatch(/enabled: card\.liveConnected && card\.trackLength > 0/);
-    expect(card).toMatch(/if \(!card\.liveConnected \|\| !\(card\.trackLength > 0\)\) return/);
+    expect(card).toMatch(/enabled: card\.liveConnected && card\.canSeek && card\.trackLength > 0/);
+    expect(card).toMatch(/if \(!card\.liveConnected \|\| !card\.canSeek \|\| !\(card\.trackLength > 0\)\) return/);
     expect(io).toMatch(/if \(!io\.liveConnected \|\| io\.deviceId === ""\) return/);
   });
 
@@ -195,5 +195,24 @@ describe("drag-to-seek", () => {
     expect(panel).toMatch(/function mediaSeek\(ms\) \{ io\.mediaSeek\(ms\) \}/);
     expect(panel).toMatch(/onMediaSeek: function\(ms\) \{ root\.mediaSeek\(ms\) \}/);
     expect(io).toMatch(/function mediaSeek\(positionMs\)/);
+  });
+});
+
+describe("seek respects canSeek", () => {
+  const card = qml("MediaCard.qml");
+  const io = qml("KcdIo.qml");
+  const panel = qml("Panel.qml");
+
+  it("disables the drag when the player denies seeking", () => {
+    expect(card).toMatch(/property bool canSeek: true/);
+    expect(card).toMatch(/enabled: card\.liveConnected && card\.canSeek && card\.trackLength > 0/);
+  });
+
+  it("refuses to spawn a seek the player denied", () => {
+    expect(io).toMatch(/io\.liveTrack\.canSeek === false\) return/);
+  });
+
+  it("plumbs canSeek null-safely from the track", () => {
+    expect(panel).toMatch(/canSeek: root\.track \? root\.track\.canSeek !== false : true/);
   });
 });

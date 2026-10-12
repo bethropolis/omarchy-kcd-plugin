@@ -190,6 +190,9 @@ function normalizeTrack(entry) {
     mediaAgeMs: pick("mediaAgeMs", "MediaAgeMs") === undefined ? -1 : numOr(pick("mediaAgeMs", "MediaAgeMs"), -1),
     length: numOr(pick("length", "Length"), 0),
     volume: numOr(pick("volume", "Volume"), -1),
+    // canSeek arrives on newer daemons; absent means unknown, which seeks
+    // (the old behavior) rather than disabling seeking everywhere.
+    canSeek: pick("canSeek", "CanSeek") !== false,
     deviceId: String(pick("deviceId", "DeviceId") || "")
   }
 }

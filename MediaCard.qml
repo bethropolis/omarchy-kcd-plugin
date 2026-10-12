@@ -15,6 +15,9 @@ Rectangle {
   property bool usableArt: false
   property bool playing: false
   property bool liveConnected: false
+  // The player itself says whether seeking is meaningful (streams deny).
+  // True unless the daemon explicitly reports false.
+  property bool canSeek: true
   property double displayPos: 0
   property double trackLength: 0
   property color foreground: Color.foreground
@@ -32,7 +35,7 @@ Rectangle {
   // while held so the playhead follows the finger before the daemon does.
   property double seekPreviewMs: -1
   function seekTo(ms) {
-    if (!card.liveConnected || !(card.trackLength > 0)) return
+    if (!card.liveConnected || !card.canSeek || !(card.trackLength > 0)) return
     card.seekPreviewMs = Math.max(0, Math.min(card.trackLength, ms))
   }
   function finishSeek() {
@@ -330,8 +333,8 @@ Rectangle {
         // stream can never fire a seek at 0.
         MouseArea {
           anchors.fill: parent
-          enabled: card.liveConnected && card.trackLength > 0
-          cursorShape: Qt.PointingHandCursor
+          enabled: card.liveConnected && card.canSeek && card.trackLength > 0
+          cursorShape: card.liveConnected && card.canSeek && card.trackLength > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
           preventStealing: true
           onPressed: function(mouse) { card.seekTo(mouse.x / width * card.trackLength) }
           onPositionChanged: function(mouse) { if (pressed) card.seekTo(mouse.x / width * card.trackLength) }

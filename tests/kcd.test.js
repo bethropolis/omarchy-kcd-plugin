@@ -153,6 +153,12 @@ describe("media helpers", () => {
     ...over,
   });
 
+  it("normalizeTrack keeps canSeek, defaulting to true when absent", () => {
+    expect(Kcd.normalizeTrack(track({ canSeek: true })).canSeek).toBe(true);
+    expect(Kcd.normalizeTrack(track({ canSeek: false })).canSeek).toBe(false);
+    expect(Kcd.normalizeTrack(track()).canSeek).toBe(true);
+  });
+
   it("normalizeTrack needs a title", () => {
     expect(Kcd.normalizeTrack(null)).toBeNull();
     expect(Kcd.normalizeTrack({ player: "x" })).toBeNull();

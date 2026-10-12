@@ -215,6 +215,7 @@ Panel {
             track: root.track
             usableArt: root.usableArt
             playing: root.playing
+            canSeek: root.track ? root.track.canSeek !== false : true
             liveConnected: root.liveConnected
             displayPos: root.displayPos
             trackLength: root.trackLength

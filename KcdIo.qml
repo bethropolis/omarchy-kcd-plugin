@@ -575,6 +575,9 @@ QtObject {
   // covers the round-trip, and the daemon's next report is confirmation.
   function mediaSeek(positionMs) {
     if (!io.liveConnected || io.deviceId === "") return
+    // A player that denies seeking (streams) must never receive one: the
+    // daemon would resolve against nothing and the drag would lie.
+    if (io.liveTrack && io.liveTrack.canSeek === false) return
     var target = Math.max(0, Number(positionMs) || 0)
     // Fresh stamp, never the ticker: the whole point is the ticker may be
     // stale at the moment of the drag.
