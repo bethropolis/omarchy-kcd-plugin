@@ -212,8 +212,16 @@ describe("icon font selection", () => {
     }
   });
 
-  it("lets the closed-bar label follow the probed family", () => {
+  it("splits the closed-bar label into icon and figure runs", () => {
     expect(bar).toMatch(/readonly property string panelIconFont: panelLoader\.item \? String\(panelLoader\.item\.contentIconFont/);
-    expect(bar).toMatch(/fontFamily: root\.panelIconFont !== "" \? root\.panelIconFont : Style\.font\.family/);
+    expect(bar).toMatch(/readonly property string barFontFamily: root\.bar \? root\.bar\.fontFamily : Style\.font\.family/);
+    expect(bar).toMatch(/readonly property string barIconFont: root\.panelIconFont !== "" \? root\.panelIconFont : root\.barFontFamily/);
+    // One Text cannot hold two families: the built-in label hides and two
+    // overlay Texts take over, while `text` stays set for sizing.
+    expect(bar).toMatch(/labelVisible: false/);
+    expect(bar).toMatch(/text: root\.labelIcon/);
+    expect(bar).toMatch(/font\.family: root\.barIconFont/);
+    expect(bar).toMatch(/text: root\.labelFigures/);
+    expect(bar).toMatch(/font\.family: root\.barFontFamily/);
   });
 });

@@ -360,6 +360,16 @@ describe("icon font probe", () => {
     expect(Kcd.iconFont(null, "monospace")).toBe("monospace");
   });
 
+  it("barLabelRuns splits the icon glyph from the figures", () => {
+    // The space stays with the figures so the two overlay Texts measure the
+    // same width as the whole string.
+    expect(Kcd.barLabelRuns("X 69%")).toEqual({ icon: "X", figures: " 69%" });
+    expect(Kcd.barLabelRuns("X --")).toEqual({ icon: "X", figures: " --" });
+    expect(Kcd.barLabelRuns("69%")).toEqual({ icon: "", figures: "69%" });
+    expect(Kcd.barLabelRuns("")).toEqual({ icon: "", figures: "" });
+    expect(Kcd.barLabelRuns(null)).toEqual({ icon: "", figures: "" });
+  });
+
   it("ICON_CODEPOINTS covers every PUA glyph used in the sources", () => {
     // The probe only shields the glyphs it was told about: a new icon added
     // in any QML/JS file without a matching codepoint here would silently

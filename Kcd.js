@@ -391,6 +391,17 @@ function iconFont(probed, fallback) {
   return p !== "" ? p : String(fallback || "")
 }
 
+// Bar label runs: the label is one icon glyph plus figures ("󰂃 69%"), and a
+// single Text cannot hold two families, so BarWidget renders two Texts. Split
+// on the first space; the space stays with the figures so the measured width
+// matches the whole string. No space means figures only (empty icon).
+function barLabelRuns(label) {
+  var s = String(label || "")
+  var at = s.indexOf(" ")
+  if (at < 0) return { icon: "", figures: s }
+  return { icon: s.slice(0, at), figures: s.slice(at) }
+}
+
 // Nerd Font battery ladder, same convention as omarchy.power: the icon
 // itself encodes level + charging, so no bolt emoji is ever needed.
 var BATTERY_CHARGING = ["󰢜", "󰂆", "󰂇", "󰂈", "󰢝", "󰂉", "󰢞", "󰂊", "󰂋", "󰂅"]
@@ -497,6 +508,7 @@ if (typeof module !== "undefined") {
     mprisCommand: mprisCommand,
     batteryText: batteryText,
     iconFont: iconFont,
+    barLabelRuns: barLabelRuns,
     iconProbeCommand: iconProbeCommand,
     parseIconProbeOutput: parseIconProbeOutput,
     ICON_CODEPOINTS: ICON_CODEPOINTS,
