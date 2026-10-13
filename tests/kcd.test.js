@@ -274,6 +274,19 @@ describe("command builders", () => {
     }
   });
 
+  it("inferZeroVolume recovers omitempty-dropped zeroes", () => {
+    const at = (volume) => ({ player: "p", volume });
+    // Same player, known before, unreported now: went to 0.
+    expect(Kcd.inferZeroVolume(at(-1), at(31)).volume).toBe(0);
+    // Known levels pass through untouched.
+    expect(Kcd.inferZeroVolume(at(12), at(31)).volume).toBe(12);
+    // New player or never-known: genuinely unknown, never 0.
+    expect(Kcd.inferZeroVolume(at(-1), { player: "q", volume: 31 }).volume).toBe(-1);
+    expect(Kcd.inferZeroVolume(at(-1), at(-1)).volume).toBe(-1);
+    expect(Kcd.inferZeroVolume(at(-1), null).volume).toBe(-1);
+    expect(Kcd.inferZeroVolume(null, at(31))).toBeNull();
+  });
+
   it("pairCommand advertises without accepting anything", () => {
     expect(Kcd.pairCommand()).toEqual(["kcd", "pair", "--advertise-only", "--json"]);
     // Auto-accept must never come back: it trusts whoever asks first on

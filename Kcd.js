@@ -281,6 +281,14 @@ function stepVolume(current, delta) {
   return v === c ? null : v
 }
 
+// Same player, known volume, now unreported ⇒ went to 0 (the daemon
+// marshals volume with omitempty). Never infer from never-known.
+function inferZeroVolume(next, prev) {
+  if (!next || next.volume >= 0) return next
+  if (prev && prev.player === next.player && prev.volume >= 0) next.volume = 0
+  return next
+}
+
 // `kcd mpris volume --device <id> <0-100>`: absolute level, flags first.
 // Null or out-of-range levels spawn nothing (Number(null) is 0: never mute
 // by accident).
@@ -546,6 +554,7 @@ if (typeof module !== "undefined") {
     tileCommand: tileCommand,
     mprisCommand: mprisCommand,
     stepVolume: stepVolume,
+    inferZeroVolume: inferZeroVolume,
     volumeCommand: volumeCommand,
     seekCommand: seekCommand,
     batteryText: batteryText,

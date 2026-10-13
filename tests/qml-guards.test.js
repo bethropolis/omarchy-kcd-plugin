@@ -318,4 +318,8 @@ describe("volume wheel", () => {
     expect(io).toMatch(/function adjustVolume\(delta\)/);
     expect(io).toMatch(/Kcd\.volumeCommand\(io\.deviceId, Kcd\.stepVolume\(io\.liveTrack\.volume, delta\)\)/);
   });
+
+  it("recovers dropped zeroes before storing the track", () => {
+    expect(io).toMatch(/io\.track = Kcd\.inferZeroVolume\(next, io\.track\)/);
+  });
 });

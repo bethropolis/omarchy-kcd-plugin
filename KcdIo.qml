@@ -270,7 +270,7 @@ QtObject {
   function setTrack(next) {
     if (next) {
       trackClearTimer.stop()
-      io.track = next
+      io.track = Kcd.inferZeroVolume(next, io.track)
     } else if (io.track !== null) {
       trackClearTimer.restart()
     }
