@@ -62,6 +62,7 @@ Panel {
   function startDaemon() { io.startDaemon() }
   function runTile(tile) { io.runTile(tile) }
   function mediaAction(action) { io.mediaAction(action) }
+  function adjustVolume(delta) { io.adjustVolume(delta) }
   function mediaSeek(ms) { io.mediaSeek(ms) }
   // shareFile() splits at the panel boundary: guard + close here (UI),
   // pick-and-send in io (process spawn).
@@ -229,6 +230,7 @@ Panel {
             fontFamily: root.contentFontFamily
             iconFontFamily: root.contentIconFont
             onMediaAction: function(action) { root.mediaAction(action) }
+            onVolumeAdjust: function(delta) { root.adjustVolume(delta) }
             onMediaSeek: function(ms) { root.mediaSeek(ms) }
           }
 

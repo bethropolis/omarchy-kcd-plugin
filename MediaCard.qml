@@ -33,7 +33,22 @@ Rectangle {
   readonly property string onAccent: accent.hslLightness > 0.5 ? "#161824" : "#ffffff"
 
   signal mediaAction(string action)  // "previous" | "toggle" | "next"
+  signal volumeAdjust(int delta)  // percent-point step from the wheel
   signal mediaSeek(double posMs)  // absolute target ms from a wave drag
+  // Volume readout ms, -1 when idle. The badge swaps to "vol N%" while
+  // shown so volume needs no chrome and shifts no layout.
+  property int volPreview: -1
+  function showVolume(v) {
+    card.volPreview = v
+    volTimer.restart()
+  }
+  property Timer volTimer: Timer {
+    interval: 2000
+    repeat: false
+    onTriggered: {
+      card.volPreview = -1
+    }
+  }
   // Drag preview ms, -1 when not dragging. The wave and badge render this
   // while held so the playhead follows the finger before the daemon does.
   property double seekPreviewMs: -1
@@ -360,13 +375,30 @@ Rectangle {
         Text {
           anchors.centerIn: parent
           textFormat: Text.PlainText
-          text: Kcd.positionText(card.seekPreviewMs >= 0 ? card.seekPreviewMs : card.displayPos, card.trackLength)
+          text: card.volPreview >= 0 ? "vol " + card.volPreview + "%" : Kcd.positionText(card.seekPreviewMs >= 0 ? card.seekPreviewMs : card.displayPos, card.trackLength)
           color: "#f8fafc"
           font.family: card.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: true
         }
       }
+    }
+  }
+
+  // Wheel anywhere on the card steps volume; clicks pass through (NoButton)
+  // so transport and wave keep them. Unknown or boundary levels spawn
+  // nothing; the badge shows the target for 2s, then time returns.
+  MouseArea {
+    anchors.fill: parent
+    acceptedButtons: Qt.NoButton
+    enabled: card.liveConnected && card.hasTrack
+    onWheel: function(wheel) {
+      var steps = Math.round(wheel.angleDelta.y / 120)
+      if (steps === 0 || !card.track) return
+      var v = Kcd.stepVolume(card.track.volume, steps * 5)
+      if (v === null) return
+      card.showVolume(v)
+      card.volumeAdjust(steps * 5)
     }
   }
 }
