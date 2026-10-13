@@ -176,11 +176,16 @@ describe("media helpers", () => {
     expect(Kcd.isFreshMedia(null)).toBe(false);
   });
 
-  it("isUsableArt only allows loadable urls", () => {
+  it("isUsableArt only allows daemon-written file urls", () => {
     expect(Kcd.isUsableArt("file:///a.jpg")).toBe(true);
-    expect(Kcd.isUsableArt("https://x/y.png")).toBe(true);
+    // Peer-supplied remote URLs pass through the daemon uncapped and Qt
+    // buffers them without a byte limit: placeholder, never the Image.
+    expect(Kcd.isUsableArt("https://x/y.png")).toBe(false);
+    expect(Kcd.isUsableArt("http://x/y.png")).toBe(false);
     expect(Kcd.isUsableArt("kdeconnect:/artUri?x=1")).toBe(false);
     expect(Kcd.isUsableArt("")).toBe(false);
+    expect(Kcd.isUsableArt(null)).toBe(false);
+    expect(Kcd.isUsableArt("file ://x")).toBe(false);
   });
 
   it("positionText and progress", () => {

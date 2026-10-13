@@ -63,6 +63,14 @@ describe("media card null-safety", () => {
     const derefs = [...src.matchAll(/card\.hasTrack \? (card\.track[^\n:]*)/g)].map((m) => m[0]);
     expect(derefs).toEqual([]);
   });
+
+  it("loads artwork only through the gated artUrl()", () => {
+    // artUrl() requires usableArt (file:// only: peer-supplied remote URLs
+    // would let Qt buffer an uncapped response). Any direct assignment of a
+    // track URL to artwork.source would bypass that gate.
+    const loads = [...src.matchAll(/artwork\.source = ([\w.]*\(\)|"")/g)].map((m) => m[1]);
+    expect(loads).toEqual(["artUrl()", "\"\"", "card.artUrl()"]);
+  });
 });
 describe("pairing never auto-accepts", () => {
   const src = qml("KcdIo.qml");

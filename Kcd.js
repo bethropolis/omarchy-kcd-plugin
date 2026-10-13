@@ -202,12 +202,15 @@ function numOr(value, fallback) {
   return isFinite(n) && n >= 0 ? n : fallback
 }
 
-// Album art is only loadable once the daemon has resolved it to a
-// file:// or http(s):// URL. A raw `kdeconnect:/artUri?...` URI (fetch
-// still in flight or failed) must render a placeholder instead.
+// Album art loads only from file:// URLs the daemon itself wrote (its
+// kdeconnect:/ side channel caps payloads at 5 MiB). Peer-supplied
+// http(s):// URLs pass through the daemon uncapped, and Qt buffers the
+// whole response before decoding with no byte limit, so handing one to the
+// Image would let a peer or its server exhaust shell memory. Those render
+// the placeholder instead. A raw `kdeconnect:/artUri?...` URI (fetch still
+// in flight or failed) likewise renders a placeholder.
 function isUsableArt(url) {
-  var u = String(url || "")
-  return u.indexOf("file://") === 0 || u.indexOf("http://") === 0 || u.indexOf("https://") === 0
+  return String(url || "").indexOf("file://") === 0
 }
 
 // Parse one `kcd watch --json` stdout line.
