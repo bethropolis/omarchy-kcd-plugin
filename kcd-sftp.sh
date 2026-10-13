@@ -1,26 +1,12 @@
 #!/usr/bin/env bash
 
-# io.github.bethropolis.kcd: mount or unmount a paired phone's storage over
-# SFTP. Usage: kcd-sftp.sh <mount|unmount> <device-id>
-#
-# The panel spawns this detached, so an unhandled error would vanish. kcd
-# does the real work for a mount (credential wait, sshfs, file-manager
-# hand-off); this script's job is to turn a failure into something the user
-# can act on.
-#
-#   mount succeeded      -> silent, the file manager opened
-#   fuse not permitted   -> critical note with the /etc/fuse.conf fix
-#   sshfs missing        -> critical note with the install command
-#   unmount when unmounted -> critical note saying there was nothing mounted
-#   stale mount          -> critical note naming the path that is stuck
-#   anything else        -> critical note with kcd's own output
-#
-# Nothing here escalates privileges: fixes are printed for the user to run,
-# never executed. The device id arrives as an argument and is only ever
-# passed to kcd as one, so no shell interpolation of remote data happens.
-#
-# Mount is idempotent upstream (a repeat call returns the existing mount
-# point), so there is no "already mounted" case to classify here.
+# Mount or unmount a paired phone's storage over SFTP.
+# Usage: kcd-sftp.sh <mount|unmount> <device-id>
+
+# Detached spawn, so failures report as actionable notifications (never
+# silent); fixes are printed for the user, never executed.
+
+# Mount is idempotent upstream: no "already mounted" case to classify.
 
 set -u
 
@@ -40,17 +26,14 @@ case $mode in
     ;;
 esac
 
-# Folder glyph, matching the tile that triggers a mount; the tile shows an
-# eject glyph when unmounting, so the two modes read as a pair.
+# Folder glyph matches the mount tile; eject when unmounting.
 GLYPH=$'\U000F07B'
 
 if [[ $mode == unmount ]]; then
   if error=$(kcd sftp unmount "$device_id" 2>&1); then
     exit 0
   fi
-  # kcd distinguishes these itself, so no guessing: "not mounted: no SFTP
-  # mount for device <id>" and "stale SFTP mount at <path> could not be
-  # released, ...".
+  # kcd distinguishes these itself, so match its messages, don't guess.
   case $error in
     "not mounted"*)
       hint="There was nothing mounted to unmount. Mount it first with the Files tile."

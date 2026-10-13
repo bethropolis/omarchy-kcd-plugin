@@ -1,14 +1,5 @@
-// Structural guards for the QML sources.
-//
-// These cannot be unit tested through Kcd.js, but they can be asserted: a
-// binding that gets clobbered by an assignment is a runtime-only failure that
-// no amount of bun testing would catch. It bit us once -- watchStreamGuard
-// assigned `watchProc.running`, which stripped the `running: installOk &&
-// watchAlive` binding, so after a single guard trip the backoff restart could
-// never bring the stream back and the panel sat on "daemon isn't running"
-// while the daemon was perfectly healthy.
-//
-// Run: bun test tests/
+// Structural guards for the QML sources: bindings clobbered by assignment
+// fail only at runtime, so assert them here. Run: bun test tests/
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -20,18 +11,14 @@ const qml = (name) => readFileSync(join(root, name), "utf8");
 describe("KcdIo Process bindings", () => {
   const src = qml("KcdIo.qml");
 
-  // Process blocks whose `running:` is driven by other properties. A literal
-  // `running: false` is only an initial value that the panel controls by
-  // assignment, which is the intended design for one-shot probes; assigning to
-  // a *bound* one strips the binding permanently, so nothing can turn that
-  // process back on.
+  // A `running: false` literal is panel-owned by design; assigning to a
+  // bound one strips the binding permanently.
   const bound = [...src.matchAll(/property Process (\w+): Process \{\s*\n\s*running:\s*([^\n]*)/g)]
     .map((m) => ({ name: m[1], binding: m[2].trim() }))
     .filter((p) => /\bio\./.test(p.binding) || /&&|\|\|/.test(p.binding));
 
   it("treats the watch stream as the only bound Process", () => {
-    // Guard against this test silently matching nothing if the file is
-    // reformatted.
+    // Must match something: an empty match guards nothing.
     expect(bound.map((b) => b.name)).toEqual(["watchProc"]);
     expect(bound[0].binding).toMatch(/io\.watchAlive/);
   });
@@ -44,8 +31,7 @@ describe("KcdIo Process bindings", () => {
   });
 
   it("keeps the death path idempotent so backoff arms once per dead stream", () => {
-    // Dropping the stream fires onExited too, so without the watchDead latch
-    // the backoff would double twice per outage.
+    // Without the latch the backoff would double twice per outage.
     expect(src).toMatch(/property bool watchDead/);
     expect(src).toMatch(/if \(io\.watchDead\) return/);
     // And the latch must be cleared when a stream actually starts.
@@ -57,17 +43,15 @@ describe("media card null-safety", () => {
   const src = qml("MediaCard.qml");
 
   it("never dereferences track on hasTrack alone", () => {
-    // hasTrack and track are separate bindings and can disagree for an
-    // instant, which produced "Value is null" TypeErrors on every media
-    // repaint. Every dereference must also check track itself.
+    // hasTrack and track can disagree for an instant ("Value is null");
+    // every dereference checks both.
     const derefs = [...src.matchAll(/card\.hasTrack \? (card\.track[^\n:]*)/g)].map((m) => m[0]);
     expect(derefs).toEqual([]);
   });
 
   it("loads artwork only through the gated artUrl()", () => {
-    // artUrl() requires usableArt (file:// only: peer-supplied remote URLs
-    // would let Qt buffer an uncapped response). Any direct assignment of a
-    // track URL to artwork.source would bypass that gate.
+    // artUrl() requires usableArt; any direct track-URL assignment would
+    // bypass that gate.
     const loads = [...src.matchAll(/artwork\.source = ([\w.]*\(\)|"")/g)].map((m) => m[1]);
     expect(loads).toEqual(["artUrl()", "\"\"", "card.artUrl()"]);
   });
@@ -76,9 +60,8 @@ describe("pairing never auto-accepts", () => {
   const src = qml("KcdIo.qml");
 
   it("does not spawn `kcd pair -y` or `--yes` anywhere", () => {
-    // The marketplace security review flagged this exact shape: the first
-    // device to ask on the LAN becomes trusted before the owner ever sees
-    // a code. Advertising plus a per-device accept is the replacement.
+    // Auto-accept trusts the first asker on the LAN before the owner sees
+    // a code.
     expect(src).not.toMatch(/pair["',\s]+-y/);
     expect(src).not.toMatch(/--yes/);
     expect(src).toMatch(/--advertise-only/);
@@ -105,8 +88,7 @@ describe("pairing panel states", () => {
   it("keys the decision UI off the pending request, not the code", () => {
     expect(unpaired).toMatch(/property string pendingPairId/);
     expect(unpaired).toMatch(/hasPending: root\.pendingPairId !== ""/);
-    // A key-less request must still be decidable: no decision element
-    // may gate on verificationKey alone.
+    // No decision element may gate on verificationKey alone.
     const gated = [...unpaired.matchAll(/visible: root\.verificationKey !== ""/g)];
     expect(gated).toEqual([]);
   });
@@ -153,8 +135,7 @@ describe("downProbeTimer never runs when closed", () => {
 
   it("exists with a panelOpen-first running binding", () => {
     expect(m).not.toBeNull();
-    // panelOpen must be the first conjunct: closed stops the timer by
-    // binding, regardless of what follows.
+    // panelOpen first: closed stops the timer by binding.
     expect(m[1]).toMatch(/running: io\.panelOpen &&/);
   });
 
@@ -186,8 +167,7 @@ describe("drag-to-seek", () => {
   });
 
   it("never rewinds the anchor with a stale clock", () => {
-    // clockMs is 0 until the first tick after opening: elapsed must floor
-    // at 0 or a fresh drag computes from position 0 and overshoots.
+    // clockMs starts at 0; unfloored elapsed would rewind fresh drags.
     expect(io).toMatch(/base \+= Math\.max\(0, now - Number\(io\.liveTrack\.posAnchorMs\)\)/);
     expect(io).toMatch(/onPanelOpenChanged:[\s\S]*?io\.clockMs = Date\.now\(\)/);
   });
@@ -236,8 +216,7 @@ describe("icon font selection", () => {
     expect(io).toMatch(/property Process fontProbeProc: Process/);
     expect(io).toMatch(/onStreamFinished: io\.probedIconFont = Kcd\.parseIconProbeOutput\(text\)/);
     expect(io).toMatch(/readonly property string iconFontFamily: Kcd\.iconFont\(io\.probedIconFont, io\.themeFontFamily\)/);
-    // Re-probe when the bar injects its font, and once at startup: neither
-    // alone is sufficient (the injected value can equal the default).
+    // Both triggers needed: the injected value can equal the default.
     expect(io).toMatch(/onThemeFontFamilyChanged: io\.startFontProbe\(\)/);
     expect(io).toMatch(/Component\.onCompleted: io\.startFontProbe\(\)/);
     expect(io).toMatch(/fontProbeProc\.command = Kcd\.iconProbeCommand\(io\.themeFontFamily\)/);
@@ -250,8 +229,7 @@ describe("icon font selection", () => {
 
   it("passes the probed family to every icon-bearing section", () => {
     const plumbed = [...panel.matchAll(/iconFontFamily: root\.contentIconFont/g)];
-    // One per section: PanelHeader, MediaCard, QuickActionsRow, KcdMissing,
-    // KcdUnpaired. A section added without this drops back to theme font.
+    // One per section; a new section without it drops to theme font.
     expect(plumbed.length).toBe(5);
   });
 
@@ -283,8 +261,7 @@ describe("icon font selection", () => {
     expect(bar).toMatch(/readonly property string panelIconFont: panelLoader\.item \? String\(panelLoader\.item\.contentIconFont/);
     expect(bar).toMatch(/readonly property string barFontFamily: root\.bar \? root\.bar\.fontFamily : Style\.font\.family/);
     expect(bar).toMatch(/readonly property string barIconFont: root\.panelIconFont !== "" \? root\.panelIconFont : root\.barFontFamily/);
-    // One Text cannot hold two families: the built-in label hides and two
-    // overlay Texts take over, while `text` stays set for sizing.
+    // One Text, one family: the built-in label hides while `text` sizes.
     expect(bar).toMatch(/labelVisible: false/);
     expect(bar).toMatch(/text: root\.labelIcon/);
     expect(bar).toMatch(/font\.family: root\.barIconFont/);

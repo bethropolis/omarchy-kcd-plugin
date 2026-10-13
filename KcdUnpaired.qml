@@ -2,35 +2,28 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// Shown when kcd exists but there is no usable device. Three modes:
-// "down" (daemon not answering), "unpaired" (daemon up, nothing paired)
-// and "offline" (paired phone unreachable, e.g. asleep). One-click
-// only advertises; a candidate arrives as a request the owner accepts or
-// refuses after comparing the code, and success resolves on pair.accepted.
-// Offline needs no action, reconnect resolves itself.
+// No usable device: down (daemon silent), unpaired (nothing paired),
+// offline (paired, unreachable). Nothing pairs without the owner.
 Column {
   id: root
 
   property string mode: "down"
-  // Phone name: the paired device in offline mode, or the candidate
-  // asking to pair.
+  // Paired phone in offline mode, else the pairing candidate.
   property string deviceName: "phone"
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  // Family for the big status glyph and every tile icon; copy stays on
-  // `fontFamily`. See QuickTile.iconFontFamily.
+  // Status glyph and tile icons only; copy stays on `fontFamily`.
   property string iconFontFamily: fontFamily
-  // True while `kcd pair --advertise-only` runs (owned by the panel).
+  // True while the panel's advertisement process runs.
   property bool pairing: false
-  // Code from the pending pair request, so the phone's code can be
-  // compared before anything is trusted. Empty when nothing is pending.
+  // Pending request code for phone comparison; empty when nothing pending.
   property string verificationKey: ""
-  // Id of the phone asking to pair. The decision UI keys off this, not the
-  // code: a request without a code can still be refused.
+  // Decision UI keys off the id, not the code: codeless requests stay
+  // refusable.
   property string pendingPairId: ""
   // Why pairing did nothing, when the kcd build is too old to advertise.
   property string pairNotice: ""
-  // True while `systemctl --user start kcd` runs (owned by the panel).
+  // True while the panel's daemon-start process runs.
   property bool startingDaemon: false
 
   signal retryRequested()
@@ -100,8 +93,7 @@ Column {
     font.pixelSize: Style.font.bodySmall
   }
 
-  // A phone is asking to pair. Nothing is trusted yet: show the code so
-  // the owner can compare it against the phone, and require a decision.
+  // Nothing trusted yet: compare the code, then decide.
   Text {
     visible: root.hasPending
     textFormat: Text.PlainText
@@ -126,8 +118,7 @@ Column {
     font.bold: true
   }
 
-  // Accept or refuse the candidate. This replaces Start pairing while a
-  // request is on screen: the owner decides, never the network.
+  // The owner decides, never the network.
   Row {
     visible: root.hasPending
     width: parent.width
@@ -157,11 +148,8 @@ Column {
     }
   }
 
-  // Primary action first, accented; second is always Retry. Down mode
-  // offers one-click daemon start, unpaired mode one-click pairing, and a
-  // running advertisement offers Stop. While a request waits, the decision
-  // row above owns the choice and this row hides; a full-width Stop below
-  // ends the advertisement without deciding.
+  // Primary action (accented) plus Retry; while deciding, only Stop
+  // remains.
   Row {
     visible: !root.hasPending
     width: parent.width
@@ -194,9 +182,7 @@ Column {
     }
   }
 
-  // Full-width Stop while a request waits: ends the advertisement, keeps
-  // the decision row as the only other action. Tapping it clears the
-  // pending display too, since stopping means done with this candidate.
+  // Full-width Stop ends the advertisement without deciding.
   Row {
     visible: root.hasPending
     width: parent.width

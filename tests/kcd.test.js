@@ -1,5 +1,4 @@
-// Unit tests for ../Kcd.js (pure helpers, no Qt).
-// Run: bun test tests/
+// Unit tests for ../Kcd.js. Run: bun test tests/
 import { describe, it, expect } from "bun:test";
 import { createRequire } from "node:module";
 import { readdirSync, readFileSync } from "node:fs";
@@ -178,8 +177,7 @@ describe("media helpers", () => {
 
   it("isUsableArt only allows daemon-written file urls", () => {
     expect(Kcd.isUsableArt("file:///a.jpg")).toBe(true);
-    // Peer-supplied remote URLs pass through the daemon uncapped and Qt
-    // buffers them without a byte limit: placeholder, never the Image.
+    // Remote URLs render the placeholder: Qt buffers them with no byte limit.
     expect(Kcd.isUsableArt("https://x/y.png")).toBe(false);
     expect(Kcd.isUsableArt("http://x/y.png")).toBe(false);
     expect(Kcd.isUsableArt("kdeconnect:/artUri?x=1")).toBe(false);
@@ -254,8 +252,7 @@ describe("command builders", () => {
 
   it("pairCommand advertises without accepting anything", () => {
     expect(Kcd.pairCommand()).toEqual(["kcd", "pair", "--advertise-only", "--json"]);
-    // Auto-accept must never come back: it trusts whoever asks first on
-    // the local network, with no code shown to the owner.
+    // Auto-accept would trust whoever asks first on the LAN.
     expect(Kcd.pairCommand()).not.toContain("-y");
     expect(Kcd.pairCommand().join(" ")).not.toMatch(/--yes/);
   });
@@ -358,9 +355,8 @@ describe("icon font probe", () => {
     const argv = Kcd.iconProbeCommand("JetBrainsMono Nerd Font");
     expect(argv[0]).toBe("fc-match");
     expect(argv).toContain("%{family[0]}");
-    // The whole point: fontconfig returns the theme family unchanged when it
-    // covers all glyphs, and substitutes a covering family when it does not,
-    // so the caller can bind the result unconditionally.
+    // The theme family returns unchanged when covering all glyphs, else
+    // fontconfig substitutes: bind unconditionally.
     expect(argv[argv.length - 1]).toMatch(/^:family=JetBrainsMono Nerd Font:charset=/);
     expect(new Set(charsetOf(argv))).toEqual(new Set(Kcd.ICON_CODEPOINTS.split(" ")));
   });
@@ -386,8 +382,7 @@ describe("icon font probe", () => {
   });
 
   it("barLabelRuns splits the icon glyph from the figures", () => {
-    // The space stays with the figures so the two overlay Texts measure the
-    // same width as the whole string.
+    // The space stays with the figures so both Texts measure as one.
     expect(Kcd.barLabelRuns("X 69%")).toEqual({ icon: "X", figures: " 69%" });
     expect(Kcd.barLabelRuns("X --")).toEqual({ icon: "X", figures: " --" });
     expect(Kcd.barLabelRuns("69%")).toEqual({ icon: "", figures: "69%" });
@@ -396,9 +391,8 @@ describe("icon font probe", () => {
   });
 
   it("ICON_CODEPOINTS covers every PUA glyph used in the sources", () => {
-    // The probe only shields the glyphs it was told about: a new icon added
-    // in any QML/JS file without a matching codepoint here would silently
-    // lose coverage, which is exactly the tofu this feature exists to stop.
+    // The probe shields only listed glyphs: unlisted new icons silently
+    // lose coverage.
     const root = join(dirname(fileURLToPath(import.meta.url)), "..");
     const isPua = (o) =>
       (o >= 0xe000 && o <= 0xf8ff) ||

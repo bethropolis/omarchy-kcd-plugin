@@ -2,26 +2,21 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// Quick-action tiles: props in, signals out. Two rows — three compact
-// tiles, then two half-width so the grid stays balanced. Ordered by how
-// often they get used, most-tapped first: Ring, Screenshot, Clipboard up
-// top; Share and Files below. Tile enablement follows liveConnected.
-// Glyph codepoints are authoritative here — FontAwesome range only (the
-// panel font lacks the Material block, e.g. U+F048A renders blank).
+// Two tile rows (three compact, then two half-width), most-tapped
+// first. Glyphs are FontAwesome-range only (no Material block).
 Column {
   id: actions
   width: parent.width
   spacing: Style.space(12)
 
   property bool liveConnected: false
-  // True when the phone's storage is mounted: the Files tile becomes an
-  // Unmount tile, so the mount point never lingers unnoticed.
+  // Mounted storage turns the Files tile into Unmount, so the mount
+  // never lingers unnoticed.
   property bool storageMounted: false
   property string deviceName: "phone"
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  // Icon glyphs use the fontconfig-probed covering family; labels use
-  // `fontFamily`. See QuickTile.iconFontFamily.
+  // Icons use the probed covering family; labels use `fontFamily`.
   property string iconFontFamily: fontFamily
   readonly property color dim: Qt.darker(foreground, 1.5)
   readonly property real gap: Style.space(8)

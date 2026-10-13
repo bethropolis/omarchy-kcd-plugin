@@ -1,15 +1,9 @@
 #!/usr/bin/env bash
 
-# io.github.bethropolis.kcd: pick one local file and send it to a paired phone via kcd share.
+# Pick one local file and send it to a paired phone via kcd share.
 # Usage: kcd-share.sh <device-id> <device-name>
-#
-# The panel closes itself before this runs (the portal chooser takes over),
-# so all feedback goes out as desktop notifications:
-#   picked + sent      -> "Shared with <name>"
-#   picked dir         -> critical "is a folder" note, nothing sent
-#   chooser cancelled  -> silent exit, no notification
-#   chooser failed     -> critical "chooser did not open"
-#   kcd share failed   -> critical note with kcd's stderr
+
+# The panel already closed, so outcomes report via desktop notifications.
 
 set -u
 
@@ -21,7 +15,7 @@ fi
 device_id="$1"
 device_name="$2"
 
-# Same send glyph Tailscale's notifier uses, so shares read as one family.
+# Same send glyph as Tailscale's notifier.
 SEND_GLYPH=$'\U000F048A'
 
 picked=""
@@ -34,7 +28,7 @@ if ((status > 1)); then
   exit 1
 fi
 
-# Cancelled: a decision, not a fault. Stay silent.
+# Cancelled is a decision, not a fault: stay silent.
 [[ -n $picked ]] || exit 0
 
 if [[ -d $picked ]]; then

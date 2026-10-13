@@ -2,8 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// One quick-action tile: icon glyph over a small label.
-// Disabled tiles render dimmed and ignore clicks (v2 placeholders).
+// Icon glyph over a small label; disabled tiles dim and ignore clicks.
 Rectangle {
   id: root
 
@@ -12,12 +11,10 @@ Rectangle {
   property string tooltipText: ""
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  // Family for the icon glyph only; the label keeps `fontFamily`. Callers
-  // pass the fontconfig-probed covering family so a plain theme font can't
-  // tofu the icons; it defaults to `fontFamily` (theme font) when unset.
+  // Icon glyph only (label keeps `fontFamily`); defaults to the theme
+  // font when unset.
   property string iconFontFamily: fontFamily
-  // Accent styling for the primary action (e.g. Start pairing).
-  // Opt-in; everything else renders exactly as before.
+  // Opt-in accent for the primary action; everything else as before.
   property bool accent: false
 
   signal tapped()

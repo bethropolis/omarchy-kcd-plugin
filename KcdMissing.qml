@@ -2,15 +2,13 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// Shown when the kcd binary is absent. No kcd IO is attempted in this
-// state; the panel is an explainer plus a manual re-probe.
+// No kcd IO attempted here; explainer plus manual re-probe.
 Column {
   id: root
 
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  // Family for the big status glyph (and the Retry tile's icon); text stays
-  // on `fontFamily`. See QuickTile.iconFontFamily.
+  // Status glyph and Retry icon only; text stays on `fontFamily`.
   property string iconFontFamily: fontFamily
 
   signal retryRequested()

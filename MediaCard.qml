@@ -3,9 +3,8 @@ import qs.Commons
 import qs.Ui
 import "Kcd.js" as Kcd
 
-// Compact media card (Step 3 of the Panel split): album art, transport
-// cluster, Canvas wave seeker + timer badge. Props in, one signal out.
-// `visible` lives on the Panel.qml call site (ready state only).
+// Compact media card: album art, transport cluster, Canvas wave seeker +
+// timer badge. Props in, one signal out; `visible` lives on the call site.
 Rectangle {
   id: card
   width: parent.width
@@ -15,27 +14,23 @@ Rectangle {
   property bool usableArt: false
   property bool playing: false
   property bool liveConnected: false
-  // The player itself says whether seeking is meaningful (streams deny).
-  // True unless the daemon explicitly reports false.
+  // False when the player reports seeking meaningless (streams).
   property bool canSeek: true
   property double displayPos: 0
   property double trackLength: 0
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  // Family for icon glyphs only (transport, placeholder, play/pause); the
-  // title, artist and timer keep `fontFamily`. See QuickTile.iconFontFamily.
+  // Icon glyphs only; title, artist and timer keep `fontFamily`.
   property string iconFontFamily: fontFamily
   readonly property color dim: Qt.darker(foreground, 1.5)
-  // Theme accent (theme/colors.toml via Color.accent) drives the seeker
-  // and the play button — never a hardcoded violet.
+  // Theme accent (Color.accent) drives the seeker and play button,
+  // never a hardcoded color.
   property color accent: Color.accent
-  // Readable tone on top of a filled accent (play glyph, playhead knob).
   readonly property string onAccent: accent.hslLightness > 0.5 ? "#161824" : "#ffffff"
 
   signal mediaAction(string action)  // "previous" | "toggle" | "next"
   signal mediaSeek(double posMs)  // absolute target ms from a wave drag
-  // Drag preview ms, -1 when not dragging. The wave and badge render this
-  // while held so the playhead follows the finger before the daemon does.
+  // Drag preview ms, -1 when idle; wave and badge render it while held.
   property double seekPreviewMs: -1
   function seekTo(ms) {
     if (!card.liveConnected || !card.canSeek || !(card.trackLength > 0)) return
@@ -58,10 +53,8 @@ Rectangle {
     return "#" + h(card.accent.r) + h(card.accent.g) + h(card.accent.b)
   }
 
-  // Art load lifecycle (event-driven only — no polling): the daemon sends
-  // artPending while fetching, then a file:// URL on arrival. If that load
-  // fails transiently, retry a few times, then stop. Nothing ticks, spawns,
-  // or re-fetches in the normal case.
+  // Event-driven art: artPending while fetching, file:// URL on arrival.
+  // Transient failures retry a few times, then stop.
   property int artAttempt: 0
   readonly property bool artPending: card.track !== null && card.track !== undefined && card.track.artPending === true
   readonly property bool artLoading: card.hasTrack && (card.artPending || artwork.status === Image.Loading) && artwork.status !== Image.Ready
@@ -102,11 +95,8 @@ Rectangle {
 
   Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
 
-  // Artwork (decode capped: phones send ~960px, the card shows
-  // a ~400px crop — full decode would waste ~3.7MB per screen).
-  // Source is driven imperatively (syncArtSource): a declarative binding
-  // would be clobbered by the first retry poke, silently breaking all
-  // future URL changes. Shown only once genuinely decoded.
+  // Decode capped (480px crop of ~960px phone art). Driven imperatively:
+  // a binding would break on the first retry poke.
   Image {
     id: artwork
     anchors.fill: parent
@@ -121,8 +111,7 @@ Rectangle {
     }
   }
 
-  // Loading shimmer while the daemon is still fetching art (artPending)
-  // or a load is in flight — distinct from the failed/idle card.
+  // Shimmer while fetching or loading, distinct from failed/idle.
   Text {
     id: artPlaceholder
     anchors.centerIn: parent
@@ -141,7 +130,6 @@ Rectangle {
     }
   }
 
-  // Contrast vignette
   Rectangle {
     anchors.fill: parent
     visible: artwork.status === Image.Ready
@@ -152,7 +140,6 @@ Rectangle {
     }
   }
 
-  // Fallback when no media
   Text {
     anchors.centerIn: parent
     visible: !card.hasTrack
@@ -162,13 +149,11 @@ Rectangle {
     font.pixelSize: Style.font.body
   }
 
-  // Active content
   Item {
     anchors.fill: parent
     anchors.margins: Style.space(12)
     visible: card.hasTrack
 
-    // TOP ROW: track info (left) + transport controls (right)
     Item {
       anchors.left: parent.left
       anchors.right: parent.right
@@ -224,7 +209,6 @@ Rectangle {
           onClicked: card.mediaAction("previous")
         }
 
-        // Circular accent play/pause button
         Rectangle {
           width: Style.space(32)
           height: Style.space(32)
@@ -263,9 +247,8 @@ Rectangle {
       }
     }
 
-    // BOTTOM ROW: wavy progress seeker + unified timer badge.
-    // NOTE: no verticalAlignment on Row (not a Row property);
-    // children center themselves instead.
+    // Bottom row: wave seeker + timer badge. Row has no
+    // verticalAlignment; children center themselves.
     Row {
       anchors.left: parent.left
       anchors.right: parent.right
@@ -331,9 +314,8 @@ Rectangle {
           }
         }
 
-        // Drag-to-seek: press or drag sets the preview, release commits it.
-        // Dead unless connected with a known length, so a length-less
-        // stream can never fire a seek at 0.
+        // Press/drag previews, release commits. Dead without connection
+        // and length, so streams can't seek at 0.
         MouseArea {
           anchors.fill: parent
           enabled: card.liveConnected && card.canSeek && card.trackLength > 0
@@ -346,7 +328,6 @@ Rectangle {
         }
       }
 
-      // Unified timer badge (elapsed / total)
       Rectangle {
         id: timerBadge
         width: Style.space(82)

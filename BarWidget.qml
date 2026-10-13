@@ -5,10 +5,8 @@ import qs.Commons
 import qs.Ui
 import "Kcd.js" as Kcd
 
-// Bar button for the kcd panel: battery icon + charge that
-// mirrors the panel state. The panel owns all kcd state; this widget only
-// mirrors it for the closed-bar read-out, following the weather BarWidget
-// pattern.
+// Closed-bar readout mirroring panel state (weather BarWidget pattern).
+// The panel owns all kcd state.
 BarWidget {
   id: root
   moduleName: "io.github.bethropolis.kcd"
@@ -16,12 +14,11 @@ BarWidget {
   readonly property string panelLabel: panelLoader.item ? String(panelLoader.item.barLabel || "") : ""
   readonly property string panelTooltip: panelLoader.item ? String(panelLoader.item.barTooltip || "") : ""
   readonly property bool panelConnected: panelLoader.item ? panelLoader.item.liveConnected === true : false
-  // Icon/battery glyph family from the panel's fontconfig probe. Empty until
-  // the panel loads, hence the theme-font fallback at the use site.
+  // Probed icon family; empty until the panel loads, hence the theme
+  // fallback.
   readonly property string panelIconFont: panelLoader.item ? String(panelLoader.item.contentIconFont || "") : ""
-  // Theme family for the figures. The bar label is an icon plus figures but
-  // one Text cannot hold two families, so the button overlays two Texts:
-  // the glyph in the icon font, the figures here.
+  // Figures keep the theme family; the icon-plus-figures label overlays
+  // two Texts (one Text, one family).
   readonly property string barFontFamily: root.bar ? root.bar.fontFamily : Style.font.family
   readonly property string barIconFont: root.panelIconFont !== "" ? root.panelIconFont : root.barFontFamily
   readonly property string labelText: root.panelLabel !== "" ? root.panelLabel : "󰄜 --"
@@ -45,8 +42,7 @@ BarWidget {
     if (panelLoader.item && panelLoader.item.toggle) panelLoader.item.toggle()
   }
 
-  // Shape contract for shell.summon/hide/toggle routing: Bar.findPanelWidget
-  // requires open/close/opened on the bar-widget root.
+  // Bar.findPanelWidget needs open/close/opened on this root.
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
 
   function open() {
@@ -80,16 +76,15 @@ BarWidget {
     }
   }
 
-  // Summon/hide/toggle routing reaches the panel through the functions
-  // above (Bar.findPanelWidget); no IpcHandler here so the panel target is
-  // registered exactly once (Panel base owns it, weather pattern).
+  // Routing reaches the panel above; no IpcHandler here so the target
+  // registers exactly once.
 
   WidgetButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    // The full string stays set so sizing and visibility follow the real
-    // content; the built-in label is hidden in favor of the two runs below.
+    // Full string stays set for sizing; the built-in label hides for the
+    // two runs.
     text: root.labelText
     labelVisible: false
     fontFamily: root.barFontFamily
@@ -103,9 +98,8 @@ BarWidget {
       else root.togglePanel()
     }
 
-    // Icon + figures in their own families. Mirrors WidgetButton's label
-    // treatment (figure-height centering, native rendering, active color)
-    // so the overlay lines up with every other bar button.
+    // Icon and figures in their own families, mirroring WidgetButton's
+    // label treatment to line up.
     Row {
       anchors.centerIn: parent
       anchors.verticalCenterOffset: !button.centerFigures || button.vertical

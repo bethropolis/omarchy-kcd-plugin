@@ -3,18 +3,13 @@ import qs.Commons
 import qs.Ui
 import "Kcd.js" as Kcd
 
-// Device header (Step 2 of the Panel split): phone name, connection dot,
-// battery readout, wifi glyph + tooltip, last-seen line. Read-only inputs
-// except the long-press that requests an unpair (a gesture, so it adds no
-// visible affordance to the layout); the wifi hover state is self-contained.
-// Glyph codepoints are authoritative here — see Panel.qml history,
-// not REVIEW.md (whose snippets had them stripped).
+// Device header: phone name, connection dot, battery, wifi glyph,
+// last-seen. Unpair hides behind a long-press.
 Item {
   id: header
   width: parent.width
   height: Math.max(headerLeft.height, headerRight.height)
 
-  // Long-pressing the device cluster asks to unpair; Panel.qml confirms.
   signal unpairRequested()
 
   property string deviceName: "No phone"
@@ -26,8 +21,7 @@ Item {
   property string lastSeenText: "—"
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  // Family for the phone/battery/wifi glyphs only; all copy keeps
-  // `fontFamily`. See QuickTile.iconFontFamily.
+  // Phone/battery/wifi glyphs only; all copy keeps `fontFamily`.
   property string iconFontFamily: fontFamily
   readonly property color dim: Qt.darker(foreground, 1.5)
   // Connection state follows the theme accent, like the media seeker.

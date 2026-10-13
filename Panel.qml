@@ -4,9 +4,8 @@ import qs.Commons
 import qs.Ui
 import "Kcd.js" as Kcd
 
-// Dashboard panel for kcd:
-// auto-selected paired phone, battery, compact 120px media card with transport
-// cluster and Canvas wave seeker, quick-action tiles, version footer.
+// Dashboard panel: auto-selected phone, battery, media card with wave
+// seeker, quick-action tiles, version footer.
 Panel {
   id: root
   moduleName: "io.github.bethropolis.kcd"
@@ -19,9 +18,8 @@ Panel {
   property var hostWidget: null
   readonly property var barIdentity: hostWidget || root
 
-  // ---- IO engine (Step 4 split): all kcd state, processes and
-  // timers live in KcdIo. This root keeps panel chrome, the BarWidget
-  // contract, and thin wrappers.
+  // All kcd state, processes and timers live in KcdIo; this root keeps
+  // chrome and thin wrappers.
   KcdIo {
     id: io
     panelOpen: root.opened
@@ -63,16 +61,14 @@ Panel {
   function runTile(tile) { io.runTile(tile) }
   function mediaAction(action) { io.mediaAction(action) }
   function mediaSeek(ms) { io.mediaSeek(ms) }
-  // shareFile() splits at the panel boundary: guard + close here (UI),
-  // pick-and-send in io (process spawn).
+  // Guard + close here (UI), pick-and-send in io.
   function shareFile() {
     if (root.deviceId === "") return
     root.close()
     io.shareFile(root.deviceId, root.deviceName)
   }
 
-  // shareScreenshot() splits at the same boundary: guard + close here
-  // (UI), capture-and-send in io (process spawn).
+  // Guard + close here (UI), capture-and-send in io.
   function shareScreenshot() {
     if (root.deviceId === "") return
     root.close()
@@ -83,13 +79,12 @@ Panel {
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property color contentDim: Qt.darker(contentForeground, 1.5)
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
-  // Icon glyphs bind to this, not contentFontFamily: fontconfig resolves a
-  // family that covers every glyph, so a plain theme font can neither tofu
-  // the icons nor make Qt mix families mid-row. See KcdIo.iconFontFamily.
+  // Probed covering family for icon glyphs; a plain theme font can
+  // neither tofu nor mix families.
   readonly property string contentIconFont: io.iconFontFamily
 
-  // Unpair is a long-press on the header plus a confirm step, so the
-  // dashboard carries no affordance for it.
+  // Unpair hides behind a header long-press plus confirm: no dashboard
+  // affordance.
   property bool unpairConfirmOpen: false
 
   function requestUnpair() {
@@ -149,12 +144,12 @@ Panel {
       root.bar.centerHoverRevealSuppressed = value
   }
 
-  // ---- IO: one-shot hydration (CLI) + live stream (kcd watch).
+  // ---- IO: version probe plus the live watch stream.
   Component.onCompleted: root.refresh()
 
 
-  // Footer gear: edit kcd.toml in Neovim via the user's terminal
-  // ($TERMINAL, falling back to xdg-terminal-exec).
+  // Footer gear: edit kcd.toml in Neovim via $TERMINAL (xdg-terminal-exec
+  // fallback).
   function openSettings() {
     var term = Quickshell.env("TERMINAL")
     if (!term) term = "xdg-terminal-exec"
@@ -194,7 +189,7 @@ Panel {
           width: dashScroll.width
           spacing: Style.space(12)
 
-          // ---- 1. Header (ready state only; Step 2 split)
+          // ---- 1. Header (ready state only)
           PanelHeader {
             width: parent.width
             visible: root.uiState === "ready"
@@ -213,7 +208,7 @@ Panel {
           }
 
 
-          // ---- 2. Compact media card (Step 3 split)
+          // ---- 2. Compact media card
           MediaCard {
             width: parent.width
             visible: root.uiState === "ready"
@@ -233,7 +228,7 @@ Panel {
           }
 
 
-          // ---- 3. Quick actions (ready state only; Step 1 split)
+          // ---- 3. Quick actions (ready state only)
           QuickActionsRow {
             width: parent.width
             visible: root.uiState === "ready"

@@ -1,18 +1,10 @@
 #!/usr/bin/env bash
 
-# io.github.bethropolis.kcd: capture the focused monitor and send it to a paired phone via kcd share.
+# Capture the focused monitor and send it to a paired phone via kcd share.
 # Usage: kcd-screenshot-share.sh <device-id> <device-name>
-#
-# The panel closes itself before this runs (grim must not catch it), so
-# all feedback goes out as desktop notifications.
-#
-# Race this avoids: `kcd share` returns once the transfer INVITATION is
-# sent, but the daemon only opens the file seconds later when the phone
-# connects to the side-channel. Deleting the capture on CLI return (e.g.
-# a /tmp trap) makes the send fail with "no such file or directory".
-# Captures therefore stage as real temp files and are deleted only after
-# a terminal share.complete event (/tmp is tmpfs, so anything left behind
-# by the timeout path below still vanishes on reboot).
+
+# The panel already closed (grim must not catch it); the phone pulls
+# seconds after `kcd share` returns, so captures stage as real temp files.
 
 set -u
 
@@ -31,12 +23,10 @@ shot=$(mktemp /tmp/kcd-shot-XXXXXX.png) || {
   omarchy-notification-send -g "$SEND_GLYPH" -u critical "Could not capture screenshot" "temp file not writable"
   exit 1
 }
-# Backstop: drop staged captures older than an hour (kept that long so a
-# late-connecting phone can still pull the file after the wait below).
+# Backstop: staged captures older than an hour; a late phone may still pull.
 find /tmp -maxdepth 1 -name 'kcd-shot-*.png' -mmin +59 -delete 2>/dev/null || true
 
-# mktemp already created the file; shot_base names it on the wire and in
-# the share.complete match below.
+# shot_base names the staged file on the wire and in the share.complete match.
 shot_base=$(basename "$shot")
 
 notify_fail() {
@@ -74,9 +64,8 @@ else
   exit 1
 fi
 
-# Wait for the terminal event for THIS file (ack line + unrelated events
-# skipped). Timeout leaves the staged file for the 1h prune pass (and
-# /tmp itself on reboot) so a late phone can still complete the pull.
+# Wait for this file's terminal event. Timeout leaves the staged file for
+# pruning so a late phone can still pull.
 timeout 90 kcd watch --json '["share.complete"]' 2>/dev/null | python3 -c '
 import json, sys
 want = sys.argv[1]

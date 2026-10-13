@@ -1,17 +1,8 @@
-// Pure kcd data helpers for the panel.
-// Qt-free so it can be unit tested under node; QML owns all Process IO.
-//
-// Two wire shapes exist and both must be handled:
-//   - `kcd <cmd> --json` prints Go structs with CAPITALIZED keys
-//     (ID, Name, State, Connected).
-//   - Raw IPC (`devices` over the socket) uses lowercase keys
-//     (id, name, state, connected).
-// Normalize everything to { id, name, type, state, connected } here.
+// Pure kcd data helpers: CAPITALIZED --json keys and lowercase IPC keys
+// normalized here. Qt-free for node unit tests; QML owns all Process IO.
 
-// Device IDs are daemon-supplied and untrusted: never let one reach a
-// shell. Real IDs are UUID-shaped hex with underscores. The dash is
-// escaped so the class is not read as a `.`-to-`:` range (which would
-// quietly admit "/" and "@").
+// Device IDs are daemon-supplied and untrusted: never reach a shell.
+// Dash is escaped so the class is not a `.`-to-`:` range admitting / and @.
 function isSafeDeviceId(id) {
   return /^[A-Za-z0-9_.:\-]+$/.test(String(id || ""))
 }
@@ -41,9 +32,8 @@ function normalizeDevice(entry) {
     // signal is the daemon's connectivity report ({ signalStrengths: {...} })
     // reduced to a display label, or null when unreported.
     signal: normalizeSignal(entry.signal !== undefined ? entry.signal : entry.Signal),
-    // SFTP mount state, from the daemon's sftp.mounted / sftp.unmounted
-    // events and the `sftp` block on the summary. The daemon omits the
-    // block entirely when nothing is mounted, so absent means false.
+    // SFTP mount state from sftp.mounted/unmounted events and the summary
+    // block, omitted entirely when nothing is mounted (absent means false).
     storageMounted: isStorageMounted(entry.sftp !== undefined ? entry.sftp : entry.Sftp)
   }
 }
@@ -66,10 +56,8 @@ function normalizeBattery(obj) {
   return { charge: Math.round(n), charging: charging === true }
 }
 
-// Reduce a connectivity report ({ signalStrengths: { key: {
-// networkType, networkDetailedType?, signalStrength } } }) to a display
-// label from its first entry. Null when unreported — callers fall back
-// to a generic "local network" line.
+// Display label from the first signalStrengths entry, or null when
+// unreported ("Unknown" is the daemon zero value, not information).
 function normalizeSignal(obj) {
   if (!obj || typeof obj !== "object") return null
   var strengths = obj.signalStrengths !== undefined && obj.signalStrengths !== null ? obj.signalStrengths : obj.SignalStrengths
@@ -80,8 +68,6 @@ function normalizeSignal(obj) {
   var detail = s.networkDetailedType !== undefined && s.networkDetailedType !== null ? s.networkDetailedType : s.NetworkDetailedType
   var type = s.networkType !== undefined && s.networkType !== null ? s.networkType : s.NetworkType
   var label = String(detail || type || "")
-  // "Unknown" is the daemon's zero value, not information — treat it as
-  // unreported so callers fall back to the generic line.
   if (label === "" || /^unknown$/i.test(label)) return null
   return {
     label: label,
@@ -103,9 +89,8 @@ function formatLastSeen(iso) {
   function pad(n) { return ("0" + n).slice(-2) }
   return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
 }
-// Freshness rule for cached media (snapshot/summary carry mediaAgeMs;
-// one-shot/watch payloads don't, and playing is always fresh). Stale
-// paused entries must not resurrect ghost tracks on boot.
+// Playing is always fresh; cached paused entries older than 10s must not
+// resurrect ghost tracks. Payloads without mediaAgeMs count as fresh.
 function isFreshMedia(track) {
   if (!track) return false
   if (track.isPlaying === true) return true
@@ -125,19 +110,16 @@ function normalizeDevices(list) {
   return out
 }
 
-// Usable means paired AND connected. Since the no-auto-dial fix the daemon
-// reports discovered strangers as UNPAIRED/disconnected, and a raw TCP link
-// without pairing can't do anything — so auto-select requires state==PAIRED
-// (case-insensitive; wire strings are SCREAMING_SNAKE like "PAIRED").
+// Paired AND connected only: strangers report UNPAIRED and an unpaired TCP
+// link is useless, so auto-select requires state==PAIRED.
 function isUsableDevice(dev) {
   if (!dev) return false
   if (dev.connected !== true) return false
   return String(dev.state || "").toUpperCase() === "PAIRED"
 }
 
-// First paired device regardless of connection. Used to tell "paired
-// but offline" (phone asleep, TCP down) apart from "never paired" —
-// the former needs patience, not another pair request.
+// First paired device regardless of connection: distinguishes offline
+// (patience) from never-paired (pair request).
 function pickPairedDevice(devices) {
   if (!devices || devices.length === 0) return null
   for (var i = 0; i < devices.length; i++) {
@@ -147,10 +129,8 @@ function pickPairedDevice(devices) {
   return null
 }
 
-// Single-device framing: first paired+connected device wins, else null.
-// Mirrors `kcd devices --connected` (usable = paired+connected). Known but
-// unpaired/disconnected devices are NOT auto-selected — callers show the
-// unpaired state instead.
+// First paired+connected device, else null. Anything else shows the
+// unpaired state instead of auto-selecting.
 function pickAutoDevice(devices) {
   if (!devices || devices.length === 0) return null
   for (var i = 0; i < devices.length; i++) {
@@ -177,16 +157,15 @@ function normalizeTrack(entry) {
     artist: String(pick("artist", "Artist") || ""),
     album: String(pick("album", "Album") || ""),
     albumArtUrl: String(pick("albumArtUrl", "AlbumArtUrl") || ""),
-    // artPending: fetch in flight, URL intentionally empty — render the
-    // placeholder with no special casing (never a kdeconnect:/ URI now).
+    // artPending: fetch in flight with intentionally empty URL.
     artPending: pick("artPending", "ArtPending") === true,
     isPlaying: pick("isPlaying", "IsPlaying") === true,
     pos: numOr(pick("pos", "Pos"), 0),
     // posAnchorMs: wall-clock Unix millis when pos was sampled. Absent
     // (0) on paused/legacy states — then hold pos frozen.
     posAnchorMs: numOr(pick("posAnchorMs", "PosAnchorMs"), 0),
-    // mediaAgeMs: ms since the phone reported (snapshot/summary only,
-    // -1 = unknown). Used for the client's own staleness rule.
+    // mediaAgeMs: ms since the phone reported (snapshot only, -1
+    // unknown), feeding the staleness rule in isFreshMedia.
     mediaAgeMs: pick("mediaAgeMs", "MediaAgeMs") === undefined ? -1 : numOr(pick("mediaAgeMs", "MediaAgeMs"), -1),
     length: numOr(pick("length", "Length"), 0),
     volume: numOr(pick("volume", "Volume"), -1),
@@ -202,20 +181,14 @@ function numOr(value, fallback) {
   return isFinite(n) && n >= 0 ? n : fallback
 }
 
-// Album art loads only from file:// URLs the daemon itself wrote (its
-// kdeconnect:/ side channel caps payloads at 5 MiB). Peer-supplied
-// http(s):// URLs pass through the daemon uncapped, and Qt buffers the
-// whole response before decoding with no byte limit, so handing one to the
-// Image would let a peer or its server exhaust shell memory. Those render
-// the placeholder instead. A raw `kdeconnect:/artUri?...` URI (fetch still
-// in flight or failed) likewise renders a placeholder.
+// Qt buffers remote art with no byte limit and the daemon forwards peer
+// URLs uncapped: file:// only. kdeconnect:/ URIs also show a placeholder.
 function isUsableArt(url) {
   return String(url || "").indexOf("file://") === 0
 }
 
-// Parse one `kcd watch --json` stdout line.
-// Returns { skip: true } for the leading {"ok":true} ack and blank lines,
-// { event: {...} } for real events, { skip: true } for garbage.
+// One watch --json stdout line: { event } for real events, { skip } for
+// the ack, blanks, and garbage.
 function parseWatchLine(line) {
   var raw = String(line || "").trim()
   if (raw === "") return { skip: true }
@@ -246,7 +219,6 @@ function configTomlPath(home, xdgConfigHome) {
   return base + "/kcd/kcd.toml"
 }
 
-// argv arrays for Quickshell.execDetached (no shell quoting needed).
 function watchCommand(events) {
   var cmd = ["kcd", "watch", "--json"]
   if (events && events.length > 0) {
@@ -255,9 +227,8 @@ function watchCommand(events) {
   return cmd
 }
 
-// Quick-action tiles that spawn kcd directly. The Files tile is not here:
-// it needs kcd-sftp.sh to classify failures, so it goes through
-// toggleStorage() instead of execDetached.
+// Tiles that spawn kcd directly. Files is absent: it needs kcd-sftp.sh,
+// so toggleStorage() runs it.
 function tileCommand(tile, deviceId) {
   var id = String(deviceId || "")
   if (tile === "ring") return ["kcd", "findmyphone", id]
@@ -272,10 +243,8 @@ function mprisCommand(action, deviceId) {
   return cmd
 }
 
-// `kcd mpris seek <offset>`: relative seek by whole seconds. The CLI has
-// no absolute mode (bare "60" already means +60s), so callers pass the
-// delta from the current anchor. Signed durations only: "+23s", "-15s".
-// A zero delta is a no-op null, never a seek-to-0.
+// Relative seek in whole seconds; the CLI has no absolute mode (bare 60
+// means +60s). Zero deltas return null, never seek-to-0.
 function seekCommand(deviceId, offsetMs) {
   var id = String(deviceId || "")
   if (!isSafeDeviceId(id)) return null
@@ -285,11 +254,8 @@ function seekCommand(deviceId, offsetMs) {
   return ["kcd", "mpris", "seek", "--device", id, offset]
 }
 
-// `kcd pair --advertise-only --json`: make the daemon discoverable for
-// pairing and accept nothing. The client learns about candidates from the
-// `pair.requested` event on its existing watch stream, so the owner can
-// compare the verification code before anything is trusted. Acceptance
-// stays an explicit per-device step (acceptPairCommand).
+// Advertise discoverability without accepting anything; candidates arrive
+// as pair.requested for the owner to decide per device.
 function pairCommand() {
   return ["kcd", "pair", "--advertise-only", "--json"]
 }
@@ -327,19 +293,16 @@ function parseAdvertiseOutput(text) {
   return null
 }
 
-// `kcd unpair <id>`: sends a rejection packet and drops the device from
-// the registry. No local state change is needed — the daemon publishes
-// device.removed and the panel follows the event.
+// Rejection packet plus registry drop. No local state change: the daemon
+// publishes device.removed and the panel follows the event.
 function unpairCommand(deviceId) {
   var id = String(deviceId || "")
   if (!isSafeDeviceId(id)) return null
   return ["kcd", "unpair", id]
 }
 
-// The argv contract kcd-sftp.sh fulfills in both directions, spelled out
-// here next to every other builder (same convention as shareCommand).
-// kcd does the real work: credential wait, sshfs mount, file-manager
-// hand-off, and fusermount cleanup on unmount.
+// Spawns kcd-sftp.sh in both directions; kcd owns credential wait,
+// mount, file-manager hand-off, and unmount cleanup.
 function mountCommand(deviceId) {
   var id = String(deviceId || "")
   if (!isSafeDeviceId(id)) return null
@@ -352,9 +315,8 @@ function unmountCommand(deviceId) {
   return ["kcd", "sftp", "unmount", id]
 }
 
-// `kcd share <id> <path>`: single file only, directories rejected by the
-// CLI. The argv contract kcd-share.sh fulfills (it invokes kcd directly);
-// spelled out here next to every other command builder.
+// Single file only (the CLI rejects directories); the argv contract
+// kcd-share.sh fulfills.
 function shareCommand(deviceId, filePath) {
   var id = String(deviceId || "")
   var path = String(filePath || "")
@@ -362,11 +324,8 @@ function shareCommand(deviceId, filePath) {
   return ["kcd", "share", id, path]
 }
 
-// Screenshot-to-phone flow: Panel closes first, then
-// kcd-screenshot-share.sh captures (grim) and sends via `kcd share`.
-// The script path is resolved by the QML caller (it knows $HOME);
-// the [bash, script, id, name] shape is spelled out here next to every
-// other command builder.
+// Panel closes first, then the script captures (grim) and shares. The
+// QML caller resolves the script path (it knows $HOME).
 function screenshotShareCommand(scriptPath, deviceId, deviceName) {
   var script = String(scriptPath || "")
   var id = String(deviceId || "")
@@ -375,27 +334,18 @@ function screenshotShareCommand(scriptPath, deviceId, deviceName) {
   return ["bash", script, id, name]
 }
 
-// Every icon glyph the panel renders, as codepoints: the private-use
-// ranges nerd fonts populate. The icon-font probe covers exactly this set
-// (a guard test extracts the real glyphs from the sources and fails on
-// drift), so a new glyph is not actually covered until it is listed here.
+// Every icon glyph rendered, as codepoints: the probe covers exactly
+// this set, so list new glyphs here.
 var ICON_CODEPOINTS = "F001 F00C F00D F011 F011C F013 F021 F028 F030 F048 F04B F04C F04D F051 F052 F071 F07B F0C1 F0EA F10B F1D8 F1E6 F1EB F0079 F007A F007B F007C F007D F007E F007F F0080 F0081 F0082 F0083 F0085 F0086 F0087 F0088 F0089 F008A F008B F089C F089D F089E"
 
-// fontconfig match for the icon glyphs, preferring the theme family. If the
-// theme font covers every codepoint the match returns it unchanged; if it
-// does not (a plain font after `omarchy font set`), fontconfig substitutes
-// the first installed family that does. So icon Texts can bind the result
-// unconditionally: no tofu, no mixing families mid-row, and no guessing
-// here about what is installed. argv only (no shell), so a family name with
-// spaces needs no quoting.
+// Preferring the theme family: unchanged when it covers all glyphs, else
+// fontconfig substitutes. Argv only, so spaced names need no quoting.
 function iconProbeCommand(themeFontFamily) {
   var family = String(themeFontFamily || "monospace")
   return ["fc-match", "-f", "%{family[0]}", ":family=" + family + ":charset=" + ICON_CODEPOINTS]
 }
 
-// First stdout line trimmed, or "" when the probe said nothing usable.
-// "" keeps the theme font: identical to today's behavior, never tofu by
-// our own hand.
+// First stdout line trimmed; unusable output keeps the theme font.
 function parseIconProbeOutput(text) {
   var line = String(text || "").split("\n")[0]
   if (!line) return ""
@@ -403,17 +353,15 @@ function parseIconProbeOutput(text) {
   return line
 }
 
-// Family for icon Texts: the probed covering family once known, else the
-// theme font. One shared picker so the fallback cannot drift per site.
+// Probed covering family once known, else the theme font: one shared
+// picker so the fallback cannot drift per site.
 function iconFont(probed, fallback) {
   var p = String(probed || "")
   return p !== "" ? p : String(fallback || "")
 }
 
-// Bar label runs: the label is one icon glyph plus figures ("󰂃 69%"), and a
-// single Text cannot hold two families, so BarWidget renders two Texts. Split
-// on the first space; the space stays with the figures so the measured width
-// matches the whole string. No space means figures only (empty icon).
+// Split the icon-plus-figures label on the first space (space stays with
+// figures). One Text cannot hold two families.
 function barLabelRuns(label) {
   var s = String(label || "")
   var at = s.indexOf(" ")
@@ -462,11 +410,8 @@ function progress(pos, length) {
   return Math.max(0, Math.min(1, p / l))
 }
 
-// Sticky single-device framing: keep the previously selected device first
-// while it is still present and usable (paired+connected), so two paired
-// phones don't flap the auto-selection (and reset battery/track) on every
-// refresh. A pinned device that lost pairing/connection stays in natural
-// order so pickAutoDevice can move on.
+// Keep the previous device first while it stays usable, so two phones
+// don't flap auto-selection. A depinned device keeps natural order.
 function stickDevice(devices, id) {
   if (!devices || devices.length === 0) return devices || []
   var want = String(id || "")
@@ -486,10 +431,8 @@ function stickDevice(devices, id) {
   return out
 }
 
-// Parse `kcd --version` output, e.g.
-// "kcd version v1.17.0 (commit 6bd0d7a, ...)" or the newer v-unprefixed
-// "kcd version 1.18.0 (commit 8126626, ...)".
-// Returns "vX.Y.Z" (normalized with v prefix) or null.
+// vX.Y.Z with v prefix from `kcd version`, tolerating v-prefixed and
+// bare formats. Null when unparseable.
 function parseVersionOutput(text) {
   var m = String(text || "").match(/v?(\d+\.\d+\.\d+)/)
   return m ? "v" + m[1] : null

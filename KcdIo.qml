@@ -3,38 +3,29 @@ import Quickshell
 import Quickshell.Io
 import "Kcd.js" as Kcd
 
-// kcd IO engine (Step 4 of the Panel split): every Process/Timer, all raw
-// kcd state, and every function that only touches them. Non-visual.
-// Panel.qml owns panel-open/UI state and calls in through the functions
-// below; it reads state through the properties below. Private-by-convention:
-// handlers (on*Output/apply*/handle*/setTrack/anchorPos) are io-internal.
+// kcd IO engine: every Process/Timer, all raw state, and only functions
+// touching them. Non-visual; Panel.qml owns UI state.
 QtObject {
   id: io
 
   // Input from Panel.qml (posTicker needs it; everything else is push).
   property bool panelOpen: false
 
-  // Installed location of this plugin (scripts live beside the QML).
-  // Single source so the spawn halves below can't drift apart.
+  // Install dir beside the QML: single source for script spawn paths.
   readonly property string pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/io.github.bethropolis.kcd"
 
-  // ---- Icon font
-  // Theme family pushed in by Panel.qml. The bar injects its font after
-  // this object is built, so a change re-probes rather than locking in the
-  // boot-time default.
+  // ---- Icon font: theme family from Panel.qml; the bar injects late,
+  // so a change re-probes.
   property string themeFontFamily: "monospace"
-  // One-shot fontconfig probe result. Empty until it lands, which keeps the
-  // theme family: identical first paint, never tofu by our own hand.
+  // Probe result; empty until it lands, keeping the theme font.
   property string probedIconFont: ""
-  // Family every icon Text binds to: the probe result once known, the theme
-  // family until then, so first paint never blocks on the probe.
+  // Icon family: probe result once known, theme family until then.
   readonly property string iconFontFamily: Kcd.iconFont(io.probedIconFont, io.themeFontFamily)
 
   onThemeFontFamilyChanged: io.startFontProbe()
   Component.onCompleted: io.startFontProbe()
 
-  // Asks fontconfig which family covers every icon glyph, preferring the
-  // theme family; see Kcd.iconProbeCommand. One short-lived spawn, no timer.
+  // One short-lived fontconfig spawn per theme-family change.
   function startFontProbe() {
     fontProbeProc.command = Kcd.iconProbeCommand(io.themeFontFamily)
     fontProbeProc.running = true
@@ -43,8 +34,8 @@ QtObject {
   // ---- State
   property var devices: []
   readonly property var autoDevice: Kcd.pickAutoDevice(devices)
-  // First paired device regardless of connection: distinguishes "paired
-  // but offline" (phone asleep, TCP down) from "never paired".
+  // First paired device even when offline: separates offline from
+  // never-paired.
   readonly property var pairedDevice: Kcd.pickPairedDevice(devices)
   readonly property string pairedName: pairedDevice ? String(pairedDevice.name) : "phone"
   readonly property string deviceId: autoDevice ? String(autoDevice.id) : ""
@@ -54,13 +45,9 @@ QtObject {
   property int batteryCharge: -1
   property bool batteryCharging: false
   property var track: null
-  // clockMs drives displayPos re-evaluation (100ms while open+playing).
   property double clockMs: 0
-  // Drift-free position from the daemon's anchor stamp: pos + elapsed
-  // while playing, frozen otherwise. Without an anchor (paused/legacy)
-  // we hold the last reported pos.
-  // Seek target ms while a seek is in flight, -1 otherwise. Cleared by the
-  // next position report (mpris.update or snapshot), never by a timer.
+  // Anchor stamp plus elapsed while playing (frozen otherwise, no anchor
+  // holds last pos); the seek hold clears on the next report, never by timer.
   property double seekHoldMs: -1
   readonly property double displayPos: io.seekHoldMs >= 0 ? io.seekHoldMs : io.anchorPos()
   property string lastSeenText: "—"
@@ -69,21 +56,18 @@ QtObject {
   // missing state the footer reads "kcd —".
   property string kcdVersion: "—"
   property bool versionOk: false
-  // Verification key from the last pair.requested, shown while pairing.
   property string verificationKey: ""
-  // The candidate awaiting the owner's decision. Held until accepted or
-  // refused, so the code on screen always belongs to a real request.
+  // Candidate awaiting the owner decision; held so the shown code belongs
+  // to a real request.
   property string pendingPairId: ""
   property string pendingPairName: ""
-  // True once the daemon confirms it is discoverable for pairing. The
-  // process starting is not proof; kcd prints the transition.
+  // True only once kcd confirms discoverability; starting the process
+  // is not proof.
   property bool advertising: false
-  // Set once advertising has actually been confirmed, so an exit before
-  // that means the build is too old for --advertise-only rather than the
-  // owner cancelling.
+  // Confirmed advertising at least once: an earlier exit means a kcd too
+  // old for --advertise-only.
   property bool pairAdvertised: false
-  // Set when we stop the process ourselves, so a deliberate cancel is not
-  // mistaken for a failure.
+  // Stopping the process ourselves is a cancel, not a failure.
   property bool pairStopping: false
   // Shown instead of silently doing nothing on a kcd without the flag.
   property string pairNotice: ""
@@ -92,32 +76,25 @@ QtObject {
   property bool daemonUp: false
   property bool daemonProbed: false
   property bool watchAlive: true
-  // True between a stream dying and the next one starting, so one dead
-  // stream arms backoff once.
+  // One dead stream arms backoff once.
   property bool watchDead: false
-  // Set by reconnectWatch() so the death path it triggers restarts at
-  // once instead of backing off; cleared on use.
+  // Deliberate bounce: restart at once instead of backing off.
   property bool watchRestartRequested: false
   property int watchBackoffMs: 2000
-  // True while the phone's storage is mounted. The daemon owns this: it
-  // arrives in the state.snapshot device summary and flips via the
-  // sftp.mounted / sftp.unmounted events.
+  // Phone-side mount state from the snapshot summary, flipped by
+  // sftp.mounted/unmounted events.
   readonly property bool storageMounted: autoDevice ? autoDevice.storageMounted === true : false
   property double ioStartMs: 0
-  // Pairing advertisement (`kcd pair --advertise-only`): true while the
-  // process runs. `advertising` is the stronger signal: it turns true only
-  // once kcd confirms the daemon is discoverable.
+  // Advertisement process lifetime; `advertising` is the stronger,
+  // kcd-confirmed signal.
   readonly property bool pairing: pairProc.running
-  // Daemon start (`systemctl --user start kcd`): true while daemonProc runs.
   readonly property bool startingDaemon: daemonProc.running
 
-  // Display layer. Raw `track` keeps last-known data; `liveTrack` is null
-  // whenever the daemon is unreachable so stale state can never render
-  // as live (green dot, creeping seek, enabled buttons).
+  // liveTrack is null whenever the daemon is unreachable, so stale state
+  // never renders as live.
   readonly property var liveTrack: io.daemonUp ? io.track : null
   readonly property bool hasTrack: liveTrack !== null && liveTrack !== undefined
-  // Single read of `liveTrack`: pairing hasTrack (separate binding,
-  // possibly stale mid-transition) with .length threw on track change.
+  // Read liveTrack once: its fields can disagree mid-transition.
   readonly property double trackLength: {
     if (liveTrack === null || liveTrack === undefined) return 0
     var l = Number(liveTrack.length)
@@ -126,10 +103,8 @@ QtObject {
   readonly property bool usableArt: hasTrack && Kcd.isUsableArt(liveTrack.albumArtUrl)
   readonly property bool playing: hasTrack && liveTrack.isPlaying === true
   readonly property bool liveConnected: io.deviceConnected && io.daemonUp
-  // Missing / down / unpaired / offline / ready. Before the first
-  // probes complete this reads "ready" (status quo) so there is no boot
-  // flash. Offline = paired but unreachable (phone asleep): patience,
-  // not another pair request.
+  // "ready" until probes complete avoids a boot flash. Offline means
+  // paired-but-unreachable: wait, don't re-pair.
   readonly property string uiState: {
     if (!io.installProbed || !io.daemonProbed) return "ready"
     if (!io.installOk) return "missing"
@@ -138,8 +113,7 @@ QtObject {
     return "ready"
   }
 
-  // ---- Closed-bar mirror (read by BarWidget.qml): battery icon encodes
-  // level + charging state. No playing indicator, no emoji.
+  // Closed-bar readout: battery icon encodes level plus charging.
   readonly property string barLabel: {
     if (batteryCharge < 0) return "󰂃 --"
     return Kcd.batteryIcon(batteryCharge, batteryCharging) + " " + batteryCharge + "%"
@@ -156,29 +130,22 @@ QtObject {
     return tip
   }
 
-  // ---- Refresh: the only CLI call left is the version probe.
-  // All panel state arrives over the watch stream (state.snapshot on
-  // connect, then battery/mpris/connectivity/device/pair events), so a
-  // refresh re-checks the binary and bounces the stream for a fresh
-  // snapshot instead of re-reading state through the CLI.
+  // All panel state arrives over the watch stream; a refresh re-checks
+  // the binary and bounces the stream for a fresh snapshot.
   function refresh() {
-    // Re-runs on every refresh (not latched): a stale installOk would
-    // blind reopen to a removed binary. While the probe runs the flags
-    // hold, so there is no flash; on exit they carry current truth.
+    // Not latched: a stale installOk would blind reopen to a removed
+    // binary. Flags hold during the probe, so no flash.
     if (!versionProc.running) {
-      // Wrapped in sh so the spawn always reports an exit: a missing kcd
-      // binary fails the spawn itself (no onExited). sh exits 127
-      // instead, completing the probe as "missing".
+      // sh wrapper so a missing binary exits 127 instead of wedging with
+      // no onExited.
       versionProc.command = ["sh", "-c", "kcd --version"]
       versionProc.running = true
     }
     io.reconnectWatch()
   }
 
-  // Refresh as a stream bounce: every watch connect starts with a fresh
-  // state.snapshot, so this is a real re-read with no CLI round-trip.
-  // Drops the stream and lets the death path restart it immediately, so
-  // the intentional exit neither backs off nor blinks the panel "down".
+  // Bounce the stream for a fresh snapshot; the death path restarts it
+  // at once with the UI untouched.
   function reconnectWatch() {
     if (!io.installOk || !io.watchAlive) return
     io.watchRestartTimer.stop()
@@ -187,9 +154,8 @@ QtObject {
     io.watchAlive = false
   }
 
-  // Start pairing from a click: advertise, or cancel an advertisement in
-  // progress. No device id, and nothing is accepted implicitly -- candidates
-  // arrive as pair.requested events and wait for the owner.
+  // Advertise, or cancel an advertisement in progress. Candidates arrive
+  // as pair.requested for the owner.
   function togglePairing() {
     if (pairProc.running) {
       io.stopAdvertising()
@@ -212,8 +178,8 @@ QtObject {
     io.advertising = false
   }
 
-  // {"advertising":true|false} is the only proof the daemon is actually
-  // discoverable; ignore anything else the CLI prints.
+  // Only {"advertising":true|false} proves discoverability; ignore the
+  // rest of the CLI output.
   function onAdvertiseOutput(text) {
     var state = Kcd.parseAdvertiseOutput(text)
     if (state === null) return
@@ -221,20 +187,15 @@ QtObject {
     if (state === true) io.pairAdvertised = true
   }
 
-  // One-click daemon start: primes `kcd.socket` (kcd >= 1.18 ships the
-  // socket unit; the service unit stays installed for activation).
-  // systemctl is idempotent (no-op if already up). The next probe/watch
-  // connect then summons the daemon on demand; onExited re-probes, so
-  // the panel leaves the down state on its own once it answers.
+  // Primes kcd.socket (idempotent); the next probe/watch summons the
+  // daemon and the panel wakes on its own.
   function startDaemon() {
     if (daemonProc.running || !io.installOk) return
     daemonProc.command = ["systemctl", "--user", "start", "kcd.socket"]
     daemonProc.running = true
   }
 
-  // Device-list intake from state.snapshot: the daemon's authoritative
-  // full state (devices with embedded battery/media/signal), so there is
-  // no partial list to top up and no empty-guard.
+  // Authoritative full state: no partial list to top up, no empty-guard.
   function applyDeviceList(devs) {
     io.seekHoldMs = -1
     var prevId = io.deviceId
@@ -252,9 +213,8 @@ QtObject {
         io.batteryCharging = ad.battery.charging === true
       }
       if (ad.media && Kcd.isFreshMedia(ad.media)) io.setTrack(ad.media)
-      // A connected phone is seen now by definition (TCP up, packets
-      // flowing) — the daemon stamp only moves on (re)connect, so it
-      // would age while the phone sits next to you.
+      // A connected phone was seen now by definition; the daemon stamp
+      // only moves on (re)connect.
       if (ad.connected) io.lastSeenText = "Now"
       else if (ad.lastSeen) io.lastSeenText = Kcd.formatLastSeen(ad.lastSeen)
       else if (switched) io.lastSeenText = "—"
@@ -262,11 +222,7 @@ QtObject {
     io.daemonText = devs.length > 0 ? "kcd — " + devs.length + " phone(s)" : "kcd — no phones"
   }
 
-  // Song-gap bridge: between tracks the player briefly reports empty
-  // metadata (null). Clearing instantly would pulse the card 120→64→120,
-  // so nulls arm a 2s grace timer instead — a valid update cancels it and
-  // only a sustained absence clears the card. Intentional resets (device
-  // switch) stop the timer and clear immediately.
+  // Grace period prevents card height flickering during track transitions.
   function setTrack(next) {
     if (next) {
       trackClearTimer.stop()
@@ -280,12 +236,11 @@ QtObject {
     return io.posAt(io.clockMs)
   }
 
-  // Position at a given wall-clock ms. The clock must never predate the
-  // sample: a ticker that hasn't ticked yet (freshly opened panel) would
-  // otherwise rewind the anchor to 0 and turn a drag into an overshoot.
+  // Position at wall-clock ms; elapsed floors at 0 so a predated clock
+  // never rewinds the anchor.
   function posAt(now) {
-    // liveTrack (daemon-gated), never the raw cache: a dead daemon must
-    // freeze the readout instead of creeping on stale data.
+    // Daemon-gated: a dead daemon freezes the readout instead of
+    // creeping on stale data.
     if (!io.liveTrack) return 0
     var base = Number(io.liveTrack.pos) || 0
     if (io.liveTrack.isPlaying === true && Number(io.liveTrack.posAnchorMs) > 0) {
@@ -296,8 +251,7 @@ QtObject {
     return Math.max(0, base)
   }
 
-  // A freshly opened panel has a ticker that hasn't ticked: seed the clock
-  // so the first paint already interpolates instead of showing the sample.
+  // Seed the clock on open so the first paint already interpolates.
   onPanelOpenChanged: {
     if (io.panelOpen) io.clockMs = Date.now()
   }
@@ -363,10 +317,8 @@ QtObject {
     }
   }
 
-  // First-seen device. Newer daemons send the whole device summary as the
-  // payload, so use it rather than guessing; kcd < that sends a bare name
-  // string, where the daemon reports strangers as UNPAIRED and disconnected
-  // (no auto-dial) and the next snapshot corrects the rest.
+  // Newer daemons send the full device summary; older ones send a bare
+  // name corrected by the next snapshot.
   function handleDeviceAdded(id, payload) {
     if (!id || !Kcd.isSafeDeviceId(id)) return
     var devs = io.devices.slice()
@@ -401,8 +353,8 @@ QtObject {
     io.daemonText = kept.length + " phone(s)"
   }
 
-  // The daemon owns SFTP mount state: it lands in the snapshot summary and
-  // flips here, so the Files tile never inspects the host's mount table.
+  // The daemon owns mount state, so the tile never inspects the host
+  // mount table.
   function applyStorageMounted(id, mounted) {
     if (!id) return
     var updated = []
@@ -418,9 +370,8 @@ QtObject {
     if (found) io.devices = updated
   }
 
-    // A phone asked to pair while we were advertising. Nothing is trusted
-  // yet: hold the candidate and its code so the owner can compare, and
-  // wait for an explicit accept or refuse.
+  // Hold the candidate and its code for owner comparison; nothing is
+  // trusted yet.
   function handlePairRequested(id, payload) {
     if (!id || !Kcd.isSafeDeviceId(id)) return
     var p = payload || {}
@@ -435,8 +386,8 @@ QtObject {
     io.verificationKey = ""
   }
 
-  // Owner confirmed the code: accept exactly that device. Any other
-  // candidate still has to be accepted on its own.
+  // Accept exactly the confirmed device; other candidates need their own
+  // accept.
   function acceptPendingPair() {
     if (io.pendingPairId === "") return
     var cmd = Kcd.acceptPairCommand(io.pendingPairId)
@@ -444,8 +395,8 @@ QtObject {
     Quickshell.execDetached(cmd)
   }
 
-  // Owner refused, or the request went stale: send the rejection so the
-  // phone stops offering, then keep advertising for the real device.
+  // Reject so the phone stops offering; keep advertising for the real
+  // device.
   function rejectPendingPair() {
     if (io.pendingPairId === "") return
     var cmd = Kcd.rejectPairCommand(io.pendingPairId)
@@ -468,8 +419,7 @@ QtObject {
     if (found) io.devices = updated
   }
 
-  // connectivity.update keeps the header's network label live instead of
-  // frozen at whatever the last snapshot carried.
+  // Keeps the header network label live instead of frozen at the snapshot.
   function applySignal(id, payload) {
     if (!id) return
     var signal = Kcd.normalizeSignal(payload)
@@ -487,9 +437,7 @@ QtObject {
     if (found) io.devices = updated
   }
 
-  // Instant 0ms connect/disconnect handling: the watch event mutates the
-  // in-memory devices list directly, so the UI flips without a CLI
-  // round-trip.
+  // Mutate the device list in place so the UI flips with no CLI round-trip.
   function handleDeviceDisconnected(id, timestamp) {
     if (!id) return
     var updated = []
@@ -507,8 +455,8 @@ QtObject {
       io.devices = updated
       if (io.deviceId === id) {
         io.lastSeenText = timestamp ? Kcd.formatLastSeen(timestamp) : "Just now"
-        // Freeze media so the playhead can't ghost-creep on an offline
-        // phone (daemonUp stays true; liveTrack gating can't do this).
+        // Freeze media: liveTrack gating alone can't stop ghost-creep on
+        // an offline phone.
         io.track = null
       }
     }
@@ -528,8 +476,8 @@ QtObject {
       updated.push(d)
     }
     if (!found) {
-      // Connected before we ever saw device.added: adopt it from the
-      // event payload so the list never waits on the next snapshot.
+      // Adopt from the event payload so the list never waits on the next
+      // snapshot.
       io.handleDeviceAdded(id, payload)
       updated = io.devices
       found = true
@@ -551,9 +499,8 @@ QtObject {
     Quickshell.execDetached(cmd)
   }
 
-  // The Files tile toggles: mount when nothing is mounted, unmount when
-  // the phone's storage is live. No cooldown needed -- mount is idempotent
-  // upstream, so a repeat tap just re-opens the file manager.
+  // Mount when unmounted, unmount when live. Mount is idempotent
+  // upstream: no cooldown needed.
   function toggleStorage() {
     if (io.deviceId === "") return
     var mode = io.storageMounted ? "unmount" : "mount"
@@ -561,26 +508,22 @@ QtObject {
   }
 
 
-  // Revoke trust for the selected phone. No local state change: the
-  // daemon publishes device.removed and applyEvent drops the device, so
-  // the panel reaches the unpaired state on its own.
+  // No local state change: device.removed drops the device and the panel
+  // follows.
   function unpairDevice() {
     var cmd = Kcd.unpairCommand(io.deviceId)
     if (!cmd) return
     Quickshell.execDetached(cmd)
   }
 
-  // shareFile() here is only the process-spawn half: Panel.qml owns the
-  // deviceId guard and closes the panel first (the portal chooser takes
-  // over from there). Invoked through bash so a lost exec bit on deploy
-  // can never break it.
+  // Spawn half only; Panel.qml guards, closes first, and resolves the
+  // path. Bash survives a lost exec bit.
   function shareFile(deviceId, deviceName) {
     Quickshell.execDetached(["bash", io.pluginDir + "/kcd-share.sh", deviceId, deviceName])
   }
 
-  // screenshotShare() mirrors shareFile(): Panel.qml owns the deviceId
-  // guard and closes the panel first (grim must not catch it); the
-  // script waits out the hide animation itself before capturing.
+  // Mirrors shareFile; the script waits out the hide animation itself
+  // before capturing.
   function screenshotShare(deviceId, deviceName) {
     Quickshell.execDetached(["bash", io.pluginDir + "/kcd-screenshot-share.sh", deviceId, deviceName])
   }
@@ -591,27 +534,21 @@ QtObject {
     Quickshell.execDetached(Kcd.mprisCommand(action, io.deviceId))
   }
 
-  // Seek from the card's wave drag: the drag names an absolute target,
-  // the CLI only moves relative, so send the delta from the live anchor.
-  // Fire-and-forget like every other transport action; the hold above
-  // covers the round-trip, and the daemon's next report is confirmation.
+  // The drag names an absolute target but the CLI moves relative: send
+  // the delta. The hold covers the round-trip.
   function mediaSeek(positionMs) {
     if (!io.liveConnected || io.deviceId === "") return
-    // A player that denies seeking (streams) must never receive one: the
-    // daemon would resolve against nothing and the drag would lie.
+    // Denied seeks (streams) resolve against nothing, so refuse them here.
     if (io.liveTrack && io.liveTrack.canSeek === false) return
     var target = Math.max(0, Number(positionMs) || 0)
-    // Fresh stamp, never the ticker: the whole point is the ticker may be
-    // stale at the moment of the drag.
+    // Fresh stamp, never the ticker: the ticker may be stale mid-drag.
     var cmd = Kcd.seekCommand(io.deviceId, target - io.posAt(Date.now()))
     if (!cmd) return
     io.seekHoldMs = target
     Quickshell.execDetached(cmd)
   }
 
-  // Local interpolation so the wave playhead creeps while playing:
-  // mpris.update only fires on real changes.
-  // Deferred track clear for the song-gap bridge (see setTrack).
+  // mpris.update fires only on real changes, so interpolate between them.
   property Timer trackClearTimer: Timer {
     interval: 2000
     repeat: false
@@ -620,8 +557,7 @@ QtObject {
     }
   }
 
-  // Repaint driver for the anchor-based position: not a clock itself,
-  // just re-triggers the displayPos binding. Math stays drift-free.
+  // Re-triggers the displayPos binding; not a clock itself.
   property Timer posTicker: Timer {
     interval: 100
     repeat: true
@@ -631,10 +567,8 @@ QtObject {
     }
   }
 
-  // Self-heal while open: a missing binary or a silent daemon is
-  // re-probed every 10s, so reinstalls and outages recover without a tap.
-  // The closed-panel guarantee is the `running` binding, not discipline:
-  // panelOpen false stops the timer, and so does leaving missing/down.
+  // Re-probe missing/down every 10s while open. The `running` binding
+  // (not discipline) guarantees never-while-closed.
   property Timer downProbeTimer: Timer {
     interval: 10000
     repeat: true
@@ -652,18 +586,8 @@ QtObject {
     }
   }
 
-  // Spawn watchdog: a watch (re)start that yields no line in time is a
-  // silent spawn failure (a missing binary reports no exit, wedging
-  // running=true with no process and no retry). Disarmed by the first
-  // line, so steady state adds zero timers.
-//
-  // The interval is generous because a cold start goes through socket
-  // activation: connecting can block while the daemon comes up, and a 10s
-  // window was short enough to trip on a healthy-but-slow start.
-  //
-  // It flips watchAlive, never `watchProc.running`: that property is bound
-  // to installOk && watchAlive, and assigning to it would strip the binding
-  // so the backoff restart could never bring the stream back.
+  // A (re)start with no line in time is a silent spawn failure: flip
+  // watchAlive, never the bound watchProc.running (generous interval for slow starts).
   property Timer watchStreamGuard: Timer {
     interval: 30000
     repeat: false
@@ -678,29 +602,23 @@ QtObject {
     io.watchStreamGuard.stop()
   }
 
-  // Shared watch-death path (real exits via onExited, silent failures via
-  // the guard above): mark down immediately, back off, retry while the
-  // binary is installed. Per-open version probes keep installOk truthful,
-  // so a missing binary quiets the loop on the next open.
+  // Death path for real exits and silent failures: mark down, back off,
+  // retry while installed.
   function noteWatchFailure() {
-    // Dropping the stream (the guard, or a real exit) can reach this twice
-    // for one dead stream. Only the first call may arm backoff, or the delay
-    // doubles faster than intended. Reset by the stream actually starting.
+    // Latched: one dead stream arms backoff once (reset when a stream
+    // starts).
     if (io.watchDead) return
     io.watchDead = true
     io.watchAlive = false
     if (io.watchRestartRequested) {
-      // Deliberate bounce from reconnectWatch() (panel open, Retry, pair
-      // exit): straight back up with the UI untouched. Marking the daemon
-      // down here painted the down page on every healthy open until the
-      // next snapshot landed, a flash under fast clicking.
+      // Requested bounces restart at once with the UI untouched: no
+      // down-page flash.
       io.watchRestartRequested = false
       io.watchAlive = true
       return
     }
-    // A failed watch is proof the daemon isn't answering, so the probe is
-    // done even with no CLI one-shot left to say so (otherwise uiState
-    // would sit in "ready" forever with a dead daemon).
+    // A dead watch proves the daemon down even with no CLI probe left
+    // to say so.
     io.daemonProbed = true
     io.daemonUp = false
     if (!io.installOk) return
@@ -709,8 +627,7 @@ QtObject {
     io.watchRestartTimer.restart()
   }
 
-  // Wedge guard: the version probe that hasn't returned 20s after launch
-  // is reaped and marked done, so a wedged spawn can never block future
+  // Reap a version probe wedged over 20s so it can never block
   // refreshes. Sleeps unless a probe is in flight.
   property Timer ioTimeout: Timer {
     interval: 5000
@@ -727,16 +644,11 @@ QtObject {
   }
 
 
-  // Panel-open and retry-tap refreshes, downProbeTimer below, intake
-  // top-ups, and the watch lifecycle (plus its spawn guard) are the only
-  // re-probe paths: installing kcd is picked up on the next open, retry,
-  // or probe tick, and the daemon's return arrives as a watch snapshot.
-  // No timer runs while the panel is closed.
+  // The only re-probe paths: opens, retries, probe ticks, intake
+  // top-ups, watch lifecycle. Nothing runs while closed.
 
-  // The plugin's only live channel: the daemon pushes a full state
-  // snapshot on connect and every later change as an event, so no CLI
-  // state reads exist. `watchAlive` (never `running` directly) is flipped
-  // so the installOk gate binding stays intact.
+  // Sole live channel: full snapshot on connect, events after. Flip
+  // watchAlive, never running, to keep the installOk gate.
   property Process watchProc: Process {
     running: io.installOk && io.watchAlive
     command: ["kcd", "watch", "--json", "--events", "device.added,device.removed,device.connected,device.disconnected,battery.update,mpris.update,connectivity.update,sftp.mounted,sftp.unmounted,pair.accepted,pair.requested,pair.rejected"]
@@ -762,9 +674,8 @@ QtObject {
     }
     onExited: function(exitCode) {
       io.installProbed = true
-      // Installed-ness comes from the exit code alone: exit 0 means the
-      // binary runs. The version string only feeds the footer — a future
-      // format change must never strand the panel in "missing" again.
+      // Exit code alone decides installed-ness; the version string only
+      // feeds the footer.
       if (exitCode !== 0) {
         io.installOk = false
         io.versionOk = false
@@ -774,9 +685,8 @@ QtObject {
     }
   }
 
-  // One-shot icon-font probe; see startFontProbe()/iconFontFamily. A
-  // missing fontconfig fails the spawn and simply leaves the theme family
-  // in place, so there is nothing to guard or retry.
+  // A missing fontconfig just leaves the theme font: nothing to guard
+  // or retry.
   property Process fontProbeProc: Process {
     running: false
     stdout: StdioCollector {
@@ -785,11 +695,8 @@ QtObject {
     }
   }
 
-  // Managed `kcd pair --advertise-only --json`: makes the daemon
-  // discoverable and accepts nothing. Captured (not detached) because the
-  // process is the advertisement's lifetime -- the owner cancels it, and a
-  // successful pair must stop it -- and because `advertising` is only true
-  // once kcd confirms the transition rather than merely started.
+  // Captured, not detached: the process lifetime is the advertisement,
+  // and `advertising` turns true only on kcd's confirmation.
   property Process pairProc: Process {
     running: false
     stdout: SplitParser {
@@ -797,9 +704,8 @@ QtObject {
     }
     onExited: function(exitCode) {
       io.advertising = false
-      // Never confirmed advertising and we did not ask it to stop: this
-      // build has no --advertise-only, so say so instead of appearing to
-      // do nothing.
+      // Exit before confirming, unasked: a kcd too old for
+      // --advertise-only. Say so instead of silence.
       if (!io.pairAdvertised && !io.pairStopping) {
         io.pairNotice = "This kcd build cannot advertise for pairing. Update it, or pair from a terminal: kcd pair"
       }
@@ -809,7 +715,7 @@ QtObject {
     }
   }
 
-  // Managed daemon start; see startDaemon(). Short-lived by nature.
+  // Managed daemon start; short-lived.
   property Process daemonProc: Process {
     running: false
     onExited: function(exitCode) {
