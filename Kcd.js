@@ -243,6 +243,25 @@ function mprisCommand(action, deviceId) {
   return cmd
 }
 
+// Volume step from the current level: null when unknown (-1), refusing
+// boundary no-ops at 0/100 so muted/maxed wheels spawn nothing.
+function stepVolume(current, delta) {
+  var c = Math.round(Number(current))
+  if (!isFinite(c) || c < 0) return null
+  var v = Math.max(0, Math.min(100, c + Math.round(Number(delta) || 0)))
+  return v === c ? null : v
+}
+
+// Absolute level, flags first. Null or out-of-range spawns nothing:
+// Number(null) is 0, so guarding here means never mute by accident.
+function volumeCommand(deviceId, volume) {
+  if (volume === null || volume === undefined) return null
+  var id = String(deviceId || "")
+  var v = Math.round(Number(volume))
+  if (!isSafeDeviceId(id) || !isFinite(v) || v < 0 || v > 100) return null
+  return ["kcd", "mpris", "volume", "--device", id, String(v)]
+}
+
 // Relative seek in whole seconds; the CLI has no absolute mode (bare 60
 // means +60s). Zero deltas return null, never seek-to-0.
 function seekCommand(deviceId, offsetMs) {
@@ -468,6 +487,8 @@ if (typeof module !== "undefined") {
     watchCommand: watchCommand,
     tileCommand: tileCommand,
     mprisCommand: mprisCommand,
+    stepVolume: stepVolume,
+    volumeCommand: volumeCommand,
     seekCommand: seekCommand,
     batteryText: batteryText,
     iconFont: iconFont,

@@ -534,6 +534,16 @@ QtObject {
     Quickshell.execDetached(Kcd.mprisCommand(action, io.deviceId))
   }
 
+  // Wheel step from the card: absolute level from the live volume, spawned
+  // fire-and-forget; the daemon's next report is the confirmation.
+  function adjustVolume(delta) {
+    if (!io.liveConnected || io.deviceId === "") return
+    if (!io.liveTrack) return
+    var cmd = Kcd.volumeCommand(io.deviceId, Kcd.stepVolume(io.liveTrack.volume, delta))
+    if (!cmd) return
+    Quickshell.execDetached(cmd)
+  }
+
   // The drag names an absolute target but the CLI moves relative: send
   // the delta. The hold covers the round-trip.
   function mediaSeek(positionMs) {

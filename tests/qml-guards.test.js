@@ -269,3 +269,30 @@ describe("icon font selection", () => {
     expect(bar).toMatch(/font\.family: root\.barFontFamily/);
   });
 });
+
+describe("volume wheel", () => {
+  const card = qml("MediaCard.qml");
+  const io = qml("KcdIo.qml");
+  const panel = qml("Panel.qml");
+
+  it("steps volume on wheel without stealing clicks", () => {
+    expect(card).toMatch(/signal volumeAdjust\(int delta\)/);
+    expect(card).toMatch(/acceptedButtons: Qt\.NoButton/);
+    expect(card).toMatch(/Kcd\.stepVolume\(card\.track\.volume, steps \* 5\)/);
+    expect(card).toMatch(/card\.volumeAdjust\(steps \* 5\)/);
+  });
+
+  it("swaps the badge to the level briefly, shifting no layout", () => {
+    expect(card).toMatch(/property int volPreview: -1/);
+    expect(card).toMatch(/"vol " \+ card\.volPreview \+ "%"/);
+    expect(card).toMatch(/property Timer volTimer: Timer \{[\s\S]*?repeat: false/);
+    expect(card).toMatch(/card\.volPreview = -1/);
+  });
+
+  it("plumbs volumeAdjust from card through panel to io", () => {
+    expect(panel).toMatch(/function adjustVolume\(delta\) \{ io\.adjustVolume\(delta\) \}/);
+    expect(panel).toMatch(/onVolumeAdjust: function\(delta\) \{ root\.adjustVolume\(delta\) \}/);
+    expect(io).toMatch(/function adjustVolume\(delta\)/);
+    expect(io).toMatch(/Kcd\.volumeCommand\(io\.deviceId, Kcd\.stepVolume\(io\.liveTrack\.volume, delta\)\)/);
+  });
+});

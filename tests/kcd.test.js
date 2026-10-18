@@ -250,6 +250,28 @@ describe("command builders", () => {
     expect(Kcd.mprisCommand("next", "")).toEqual(["kcd", "mpris", "next"]);
   });
 
+  it("stepVolume refuses unknown levels and boundary no-ops", () => {
+    expect(Kcd.stepVolume(31, 5)).toBe(36);
+    expect(Kcd.stepVolume(31, -5)).toBe(26);
+    expect(Kcd.stepVolume(98, 5)).toBe(100);
+    expect(Kcd.stepVolume(2, -5)).toBe(0);
+    expect(Kcd.stepVolume(100, 5)).toBeNull();
+    expect(Kcd.stepVolume(0, -5)).toBeNull();
+    expect(Kcd.stepVolume(-1, 5)).toBeNull();
+    expect(Kcd.stepVolume(NaN, 5)).toBeNull();
+  });
+
+  it("volumeCommand sets absolute levels with flags first", () => {
+    expect(Kcd.volumeCommand("d", 75)).toEqual(
+      ["kcd", "mpris", "volume", "--device", "d", "75"]);
+    const argv = Kcd.volumeCommand("d", 75);
+    expect(argv.indexOf("--device")).toBeLessThan(argv.indexOf("75"));
+    // Null must never become 0 (mute by accident); range enforced.
+    for (const bad of [["", 75], [null, 75], ["x'; id; echo '", 75], ["d", null], ["d", undefined], ["d", -1], ["d", 101], ["d", NaN]]) {
+      expect(Kcd.volumeCommand(bad[0], bad[1])).toBeNull();
+    }
+  });
+
   it("pairCommand advertises without accepting anything", () => {
     expect(Kcd.pairCommand()).toEqual(["kcd", "pair", "--advertise-only", "--json"]);
     // Auto-accept would trust whoever asks first on the LAN.
