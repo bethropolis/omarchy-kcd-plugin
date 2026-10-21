@@ -175,11 +175,20 @@ describe("media helpers", () => {
     expect(Kcd.isFreshMedia(null)).toBe(false);
   });
 
-  it("isUsableArt only allows daemon-written file urls", () => {
+  it("isUsableArt only allows daemon-re-encoded jpg file urls", () => {
     expect(Kcd.isUsableArt("file:///a.jpg")).toBe(true);
+    expect(Kcd.isUsableArt("file:///cache/ART.JPG")).toBe(true);
     // Remote URLs render the placeholder: Qt buffers them with no byte limit.
     expect(Kcd.isUsableArt("https://x/y.png")).toBe(false);
     expect(Kcd.isUsableArt("http://x/y.png")).toBe(false);
+    // Non-jpg file urls are pre-upgrade raw cache entries the daemon can
+    // resolve without re-encoding; only re-encoded .jpg is safe to decode.
+    expect(Kcd.isUsableArt("file:///a.png")).toBe(false);
+    expect(Kcd.isUsableArt("file:///a.gif")).toBe(false);
+    expect(Kcd.isUsableArt("file:///a.webp")).toBe(false);
+    // Query or fragment must not hide the real extension.
+    expect(Kcd.isUsableArt("file:///a.png?.jpg")).toBe(false);
+    expect(Kcd.isUsableArt("file:///a.png#x.jpg")).toBe(false);
     expect(Kcd.isUsableArt("kdeconnect:/artUri?x=1")).toBe(false);
     expect(Kcd.isUsableArt("")).toBe(false);
     expect(Kcd.isUsableArt(null)).toBe(false);

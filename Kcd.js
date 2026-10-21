@@ -181,10 +181,12 @@ function numOr(value, fallback) {
   return isFinite(n) && n >= 0 ? n : fallback
 }
 
-// Qt buffers remote art with no byte limit and the daemon forwards peer
-// URLs uncapped: file:// only. kdeconnect:/ URIs also show a placeholder.
+// file:// only (Qt buffers remote art uncapped), .jpg only: the daemon
+// re-encodes cache writes to .jpg, so anything else is replayable raw bytes.
 function isUsableArt(url) {
-  return String(url || "").indexOf("file://") === 0
+  var s = String(url || "")
+  if (s.indexOf("file://") !== 0) return false
+  return /\.jpg$/i.test(s.split(/[?#]/)[0])
 }
 
 // One watch --json stdout line: { event } for real events, { skip } for
