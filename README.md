@@ -23,13 +23,12 @@ transport controls, and single-press quick actions.
 ## Requires
 
 * Omarchy Quattro (`omarchy-shell`)
-* `kcd` daemon >= 1.22.3 with a paired phone
+* `kcd` daemon >= 2.0.0 with a paired phone
 * `sshfs`, only for the **Files** quick action
 
-The **Files** toggle needs a daemon that publishes SFTP mount state
-(`sftp.mounted` / `sftp.unmounted`, in 1.22.0). On an older daemon the
-mount still works, but the tile stays on "Files" instead of flipping to
-"Unmount"; tapping it again re-opens the folder rather than failing.
+kcd 2.0.0 is the first release with the daemon-side album-art
+authorization and cache-path fixes this plugin relies on; earlier daemons
+are not supported.
 
 ## Install
 
@@ -101,9 +100,8 @@ omarchy plugin add https://github.com/bethropolis/omarchy-kcd-plugin.git --enabl
   completes. When your phone asks to pair, the panel shows the request and
   its verification code: compare it with the phone, then **Accept** or
   **Refuse**. Nothing is trusted until you accept, so a stranger on the
-  network cannot pair itself. Pairing from the panel needs kcd 1.22.1
-  or newer, which provides `kcd pair --advertise-only`; on an older build
-  the panel says so and you can still pair from a terminal with `kcd pair`.
+  network cannot pair itself. Pairing from the panel uses
+  `kcd pair --advertise-only`.
   Daemon down?
   **Start daemon** primes the socket, then the next probe wakes the daemon
   on its own.
