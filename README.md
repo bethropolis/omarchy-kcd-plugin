@@ -23,12 +23,12 @@ transport controls, and single-press quick actions.
 ## Requires
 
 * Omarchy Quattro (`omarchy-shell`)
-* `kcd` daemon >= 2.0.0 with a paired phone
+* `kcd` daemon >= 2.0.1 with a paired phone
 * `sshfs`, only for the **Files** quick action
 
-kcd 2.0.0 is the first release with the daemon-side album-art
-authorization and cache-path fixes this plugin relies on; earlier daemons
-are not supported.
+kcd 2.0.1 is the minimum. 2.0.0 introduced the daemon-side album-art
+authorization and cache-path fixes this plugin relies on; 2.0.1 also drops
+peer-supplied local art URLs at intake. Earlier daemons are not supported.
 
 ## Install
 
